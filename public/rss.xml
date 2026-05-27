@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>법무법인 나란 | 금융사기 피해회복 상담</title>
+    <link>https://www.naranfintech.com/</link>
+    <atom:link href="https://www.naranfintech.com/rss.xml" rel="self" type="application/rss+xml" />
+    <description>투자사기, 코인사기, 로맨스스캠, 부업사기 등 금융사기 피해회복 상담을 법무법인 나란이 신속하게 지원합니다.</description>
+    <language>ko-KR</language>
+    <lastBuildDate>Tue, 19 May 2026 00:00:00 +0900</lastBuildDate>
+    <ttl>1440</ttl>
+
+    <item>
+      <title>법무법인 나란 | 금융사기 피해회복 상담</title>
+      <link>https://www.naranfintech.com/</link>
+      <guid isPermaLink="true">https://www.naranfintech.com/</guid>
+      <description>투자사기, 코인사기, 로맨스스캠, 부업사기 등 금융사기 피해회복 상담을 신속하게 지원합니다.</description>
+      <pubDate>Fri, 08 May 2026 00:00:00 +0900</pubDate>
+    </item>
+
+    <item>
+      <title>변호사 소개 | 법무법인 나란</title>
+      <link>https://www.naranfintech.com/lawyers</link>
+      <guid isPermaLink="true">https://www.naranfintech.com/lawyers</guid>
+      <description>법무법인 나란의 형사, 부동산, 금융사기 피해회복 분야 변호사 프로필과 주요 경력을 확인하세요.</description>
+      <pubDate>Fri, 08 May 2026 00:00:00 +0900</pubDate>
+    </item>
+
+    <item>
+      <title>사기업체 게시판 | 법무법인 나란</title>
+      <link>https://www.naranfintech.com/companies</link>
+      <guid isPermaLink="true">https://www.naranfintech.com/companies</guid>
+      <description>투자사기, 부업사기, 로맨스스캠 등 실제 사기업체 사례를 게시판 형식으로 확인하고 피해회복 상담을 신청하세요.</description>
+      <pubDate>Fri, 08 May 2026 00:00:00 +0900</pubDate>
+    </item>
+  </channel>
+</rss>
