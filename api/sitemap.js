@@ -1,7 +1,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
-const SITE_BASE_URL = (process.env.SITE_URL || process.env.VITE_SITE_URL || 'https://www.naranfintech.com').replace(
+const SITE_BASE_URL = (process.env.SITE_URL || process.env.VITE_SITE_URL || 'https://www.naranfintechnews.co.kr').replace(
   /\/+$/,
   '',
 )

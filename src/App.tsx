@@ -194,7 +194,7 @@ const ROUTE_PATHS: Record<PageRoute, string> = {
 
 const SITE_BASE_URL = (
   (import.meta.env.VITE_SITE_URL as string | undefined)?.trim().replace(/\/+$/, '') ||
-  'https://www.naranfintech.com'
+  'https://www.naranfintechnews.co.kr'
 )
 const SEARCH_RESULT_SITE_NAME = '법무법인나란'
 const SEARCH_RESULT_SECTION_NAME = '핀테크전문'
