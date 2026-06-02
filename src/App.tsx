@@ -23,19 +23,19 @@ import {
 } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import heroImg from './assets/hero.png'
-import picImg from './assets/pic-purple.png'
-import icon1Img from './assets/icon1-purple.png'
-import icon2Img from './assets/icon2-purple.png'
-import icon3Img from './assets/icon3-purple.png'
-import icon4Img from './assets/icon4-purple.png'
-import ssImg from './assets/ss-purple.png'
+import picImg from './assets/pic.png'
+import icon1Img from './assets/icon1.png'
+import icon2Img from './assets/icon2.png'
+import icon3Img from './assets/icon3.png'
+import icon4Img from './assets/icon4.png'
+import ssImg from './assets/ss.png'
 import logoImg from './assets/logo.png'
 import kakaoIconImg from './assets/kakao.png'
 import naranKakaoBannerImg from './assets/나란kakao.jpg'
 import law1Img from './assets/law1.png'
 import law2Img from './assets/law2.png'
 import law3Img from './assets/law3.png'
-import bannerImg from './assets/banner-purple.png'
+import bannerImg from './assets/banner.png'
 import { auth, db, isFirebaseConfigured, storage } from './firebase'
 import './App.css'
 
@@ -3577,7 +3577,7 @@ function App() {
                     ) : null}
                   </h1>
                   <p className="hero-subcopy">
-                    잘못된 초기 대응은 <strong>수사중지·불송치·무혐의</strong>로 이어질 수 있습니다.
+                    잘못된 초기 대응은 <strong>수사중지·불송치·무혐의</strong>로 이어질 수 있습니다.<br/>
                     나란은 접수 전부터 진술 방향과 입증 계획을 먼저 세웁니다.
                   </p>
                 </div>
@@ -3603,7 +3603,6 @@ function App() {
                     </button>
 
                     <p className="hero-evidence-note">
-                      실제 대응 자료가 2초마다 한 장씩 넘어갑니다.
                     </p>
                   </div>
                 ) : null}
