@@ -73,14 +73,6 @@ type RollingDisplayCase = RollingCase & {
 
 type RollingDisplayItem = RollingImageCard | RollingDisplayCase
 
-type HeroEvidenceCase = {
-  caseLabel: string
-  title: string
-  status: string
-  stamp: string
-  image: RollingImageCard
-}
-
 type CompanyCase = {
   id: string
   name: string
@@ -731,6 +723,14 @@ const rollingImageModules = {
   }),
 }
 
+const heroDeckImageModules = import.meta.glob<string>(
+  './assets/새 폴더/*.{png,jpg,jpeg,webp,avif,gif,PNG,JPG,JPEG,WEBP,AVIF,GIF}',
+  {
+    eager: true,
+    import: 'default',
+  },
+)
+
 const toRollingImageName = (path: string): string => {
   const fileName = path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? '기본 롤링 이미지'
   return fileName.replace(/[-_]+/g, ' ').trim() || '기본 롤링 이미지'
@@ -751,67 +751,61 @@ const rollingFolderDefaultCards: RollingImageCard[] = Object.entries(rollingImag
 
 const defaultRollingCards = rollingFolderDefaultCards
 
-const findDefaultRollingCardByName = (namePart: string): RollingImageCard | undefined =>
-  rollingFolderDefaultCards.find((item) => item.imageAlt.includes(namePart))
-
-const getDefaultRollingCard = (namePart: string, fallbackIndex: number): RollingImageCard | null =>
-  findDefaultRollingCardByName(namePart) ?? rollingFolderDefaultCards[fallbackIndex] ?? null
-
-const isRollingImageCard = (item: RollingImageCard | null): item is RollingImageCard => Boolean(item)
-
-const HERO_EVIDENCE_CASES = [
-  {
-    caseLabel: 'CASE 01',
-    title: '합의로 이어진 피해금 회복',
-    status: '합의서 확보',
-    stamp: '회복',
-    imageName: '합의서-2000',
-    fallbackIndex: 16,
-  },
-  {
-    caseLabel: 'CASE 02',
-    title: '민사판결로 책임 확정',
-    status: '판결문 확보',
-    stamp: '승소',
-    imageName: '민사판결-1억',
-    fallbackIndex: 5,
-  },
-  {
-    caseLabel: 'CASE 03',
-    title: '사기 가담자 형사절차 진행',
-    status: '구속구공판',
-    stamp: '진행',
-    imageName: '통지서-사기-구속구공판',
-    fallbackIndex: 9,
-  },
-]
-  .map((item): HeroEvidenceCase | null => {
-    const image = getDefaultRollingCard(item.imageName, item.fallbackIndex)
-
-    if (!image) {
-      return null
-    }
+const heroDeckCards: RollingImageCard[] = Object.entries(heroDeckImageModules)
+  .sort(([firstPath], [secondPath]) => firstPath.localeCompare(secondPath, 'ko-KR', { numeric: true }))
+  .map(([path, image], index) => {
+    const imageName = toRollingImageName(path)
 
     return {
-      caseLabel: item.caseLabel,
-      title: item.title,
-      status: item.status,
-      stamp: item.stamp,
+      id: `hero-deck-${index + 1}-${imageName}`,
+      kind: 'image',
       image,
+      imageAlt: `${imageName} 실제 사례 이미지`,
     }
   })
-  .filter((item): item is HeroEvidenceCase => Boolean(item))
 
-const HERO_EVIDENCE_WALL_CARDS = [
-  getDefaultRollingCard('강제조정1-1', 0),
-  getDefaultRollingCard('공정증서1-1', 2),
-  getDefaultRollingCard('본압류-4300', 6),
-  getDefaultRollingCard('제3채무자진술서-6100', 7),
-  getDefaultRollingCard('통지서-통신사기피해환급법-불구속구공판', 12),
-  getDefaultRollingCard('형사판결-방조1-1', 17),
-  getDefaultRollingCard('형사판결-범단1', 19),
-  getDefaultRollingCard('민사판결-1000', 4),
-].filter(isRollingImageCard)
+const HERO_DECK_VISIBLE_COUNT = 12
+const HERO_DECK_SHUFFLE_STEP = 5
+const HERO_DECK_CARD_STYLES = [
+  { x: '0px', y: '-6px', rotate: '-1deg', scale: '1', opacity: '1', z: 32 },
+  { x: '72px', y: '4px', rotate: '4.5deg', scale: '0.98', opacity: '0.96', z: 31 },
+  { x: '-76px', y: '8px', rotate: '-5deg', scale: '0.975', opacity: '0.94', z: 30 },
+  { x: '138px', y: '34px', rotate: '9deg', scale: '0.92', opacity: '0.78', z: 22 },
+  { x: '-142px', y: '38px', rotate: '-9deg', scale: '0.91', opacity: '0.76', z: 21 },
+  { x: '208px', y: '82px', rotate: '13deg', scale: '0.82', opacity: '0.48', z: 12 },
+  { x: '-210px', y: '88px', rotate: '-13deg', scale: '0.81', opacity: '0.48', z: 11 },
+  { x: '22px', y: '72px', rotate: '2deg', scale: '0.87', opacity: '0.42', z: 10 },
+  { x: '-26px', y: '112px', rotate: '-2deg', scale: '0.8', opacity: '0.34', z: 9 },
+  { x: '150px', y: '144px', rotate: '7deg', scale: '0.7', opacity: '0.28', z: 8 },
+  { x: '-150px', y: '148px', rotate: '-7deg', scale: '0.7', opacity: '0.28', z: 7 },
+  { x: '0px', y: '174px', rotate: '0deg', scale: '0.66', opacity: '0.22', z: 6 },
+] as const
+
+const getHeroDeckCardStyle = (index: number): CSSProperties => {
+  const fallbackStyle = HERO_DECK_CARD_STYLES[HERO_DECK_CARD_STYLES.length - 1]
+  const itemStyle = HERO_DECK_CARD_STYLES[index] ?? fallbackStyle
+
+  return {
+    '--deck-x': itemStyle.x,
+    '--deck-y': itemStyle.y,
+    '--deck-rotate': itemStyle.rotate,
+    '--deck-scale': itemStyle.scale,
+    '--deck-opacity': itemStyle.opacity,
+    '--deck-z': itemStyle.z,
+  } as CSSProperties
+}
+
+const getShiftedHeroDeckCards = (shuffleIndex: number): RollingImageCard[] => {
+  if (heroDeckCards.length === 0) {
+    return []
+  }
+
+  const shift = (shuffleIndex * HERO_DECK_SHUFFLE_STEP) % heroDeckCards.length
+  return [...heroDeckCards.slice(shift), ...heroDeckCards.slice(0, shift)].slice(
+    0,
+    Math.min(HERO_DECK_VISIBLE_COUNT, heroDeckCards.length),
+  )
+}
 
 const activeScamCases = [
   {
@@ -1302,6 +1296,7 @@ function App() {
   const [powerlinkKeywordInput, setPowerlinkKeywordInput] = useState('')
   const [powerlinkGenerateBusy, setPowerlinkGenerateBusy] = useState(false)
   const [heroTypedText, setHeroTypedText] = useState('')
+  const [heroDeckShuffleIndex, setHeroDeckShuffleIndex] = useState(0)
   const [companiesBannerTypedText, setCompaniesBannerTypedText] = useState('')
   const [isCompactViewport, setIsCompactViewport] = useState(() => window.matchMedia('(max-width: 900px)').matches)
   const [companyDetailStacked, setCompanyDetailStacked] = useState(false)
@@ -1494,8 +1489,16 @@ function App() {
     () => [...displayRollingCases, ...displayRollingCases, ...displayRollingCases],
     [displayRollingCases],
   )
+  const visibleHeroDeckCards = useMemo(
+    () => getShiftedHeroDeckCards(heroDeckShuffleIndex),
+    [heroDeckShuffleIndex],
+  )
   const consultationSubmitDisabled =
     consultationBusy || consultationAfter2025Input === 'no' || !consultationPrivacyAgreed
+
+  const handleHeroDeckShuffle = () => {
+    setHeroDeckShuffleIndex((currentIndex) => currentIndex + 1)
+  }
 
   useEffect(() => {
     const legacyRoute = resolveLegacyHashRoute(window.location.hash)
@@ -3566,33 +3569,31 @@ function App() {
                   </p>
                 </div>
 
-                <div className="hero-evidence-board" aria-label="법무법인 나란 실제 진행 사례 자료">
-                  <div className="hero-evidence-wall" aria-hidden="true">
-                    {HERO_EVIDENCE_WALL_CARDS.map((item) => (
-                      <img src={item.image} alt="" key={`hero-wall-${item.id}`} />
-                    ))}
-                  </div>
+                {visibleHeroDeckCards.length > 0 ? (
+                  <div className="hero-evidence-board" aria-label="법무법인 나란 실제 진행 사례 자료">
+                    <button
+                      type="button"
+                      className="hero-card-deck"
+                      onClick={handleHeroDeckShuffle}
+                      aria-label="실제 진행 사례 이미지 카드 섞기"
+                    >
+                      {visibleHeroDeckCards.map((item, index) => (
+                        <img
+                          className="hero-card-deck-image"
+                          src={item.image}
+                          alt={item.imageAlt}
+                          style={getHeroDeckCardStyle(index)}
+                          loading={index < 4 ? 'eager' : 'lazy'}
+                          key={item.id}
+                        />
+                      ))}
+                    </button>
 
-                  <div className="hero-evidence-main">
-                    {HERO_EVIDENCE_CASES.map((item) => (
-                      <article className="hero-evidence-card" key={item.caseLabel}>
-                        <div className="hero-evidence-card-head">
-                          <p>{item.caseLabel}</p>
-                          <span>{item.status}</span>
-                        </div>
-                        <h2>{item.title}</h2>
-                        <div className="hero-evidence-image-wrap">
-                          <img src={item.image.image} alt={item.image.imageAlt} />
-                          <strong>{item.stamp}</strong>
-                        </div>
-                      </article>
-                    ))}
+                    <p className="hero-evidence-note">
+                      카드를 눌러 실제 대응 자료를 넘겨보세요.
+                    </p>
                   </div>
-
-                  <p className="hero-evidence-note">
-                    피해자의 목숨 같은 돈, 나란은 고소 전 승소 전략부터 세웁니다.
-                  </p>
-                </div>
+                ) : null}
 
                 <div className="hero-stats-bar" ref={heroStatsBarRef} aria-label="상담 및 해결 통계">
                   <ul className="hero-stats-list">
