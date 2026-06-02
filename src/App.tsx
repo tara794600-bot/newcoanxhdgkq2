@@ -121,7 +121,7 @@ const CONTACT_PHONE_TEL = `tel:${CONTACT_PHONE_NUMBER.replace(/[^0-9+]/g, '')}`
 const GOOGLE_ADS_ID = 'AW-16949684264'
 const GOOGLE_ADS_CONVERSION_SEND_TO = 'AW-16949684264/I91fCL6M-qMcEKjQnpI_'
 const GOOGLE_ADS_SCRIPT_ID = 'google-ads-gtag-script'
-const HERO_TYPING_TEXT = '피해금 회복은\n고소 전 전략 설계부터 시작됩니다.'
+const HERO_TYPING_TEXT = '수많은 사기 피해 대응 경험,\n그 차이를 증명합니다.'
 const COMPANIES_BANNER_TYPING_TEXT_DESKTOP =
   '경찰신고만으로는 피해금을 되찾을 수 없습니다.\n지금 바로 대응해 피해금 회복이 가능합니다.'
 const COMPANIES_BANNER_TYPING_TEXT_MOBILE =
@@ -3561,7 +3561,7 @@ function App() {
             <section className="hero-section">
               <div className="hero-inner section-wrap">
                 <div className="hero-copy">
-                  <span className="hero-alert-mark" aria-hidden="true" />
+        
                   <p className="hero-eyebrow hero-eyebrow-nowrap">
                     VIP·투자·로맨스스캠 사칭 피해, 신고만으로 끝내지 마세요
                   </p>
