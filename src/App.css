@@ -958,16 +958,49 @@ main {
 .hero-evidence-board {
   position: relative;
   z-index: 2;
-  width: min(980px, 100%);
-  margin-top: clamp(20px, 3vh, 34px);
-  padding: 0;
+  width: min(1040px, 100%);
+  margin-top: clamp(16px, 2.5vh, 30px);
+  padding: clamp(8px, 1vw, 14px) 0 0;
+}
+
+.hero-evidence-board::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(820px, 94%);
+  height: 74%;
+  transform: translate(-50%, -46%);
+  border: 1px solid rgba(122, 191, 255, 0.15);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(68, 154, 255, 0.08) 0%, rgba(2, 18, 44, 0.16) 100%),
+    rgba(3, 18, 45, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(220, 242, 255, 0.08),
+    0 28px 60px rgba(0, 3, 14, 0.24);
+  pointer-events: none;
+}
+
+.hero-evidence-board::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  width: min(680px, 80%);
+  height: 16px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, rgba(101, 182, 255, 0.36) 50%, transparent 100%);
+  filter: blur(12px);
+  pointer-events: none;
 }
 
 .hero-card-deck {
   position: relative;
   display: block;
-  width: min(780px, 100%);
-  height: clamp(390px, 39vw, 500px);
+  width: min(860px, 100%);
+  height: clamp(360px, 34vw, 465px);
   margin: 0 auto;
   border: none;
   background: transparent;
@@ -981,13 +1014,13 @@ main {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: 3%;
-  width: min(620px, 82%);
-  height: 38%;
+  bottom: 8%;
+  width: min(620px, 76%);
+  height: 30%;
   transform: translateX(-50%);
   border-radius: 999px;
   background:
-    radial-gradient(ellipse at center, rgba(75, 167, 255, 0.34) 0%, rgba(25, 92, 177, 0.12) 45%, transparent 72%);
+    radial-gradient(ellipse at center, rgba(75, 167, 255, 0.28) 0%, rgba(25, 92, 177, 0.1) 48%, transparent 74%);
   filter: blur(10px);
   pointer-events: none;
 }
@@ -1005,16 +1038,17 @@ main {
 .hero-card-deck-image {
   position: absolute;
   left: 50%;
-  top: 48%;
+  top: 48.5%;
   display: block;
-  width: clamp(190px, 22vw, 285px);
+  width: clamp(190px, 20vw, 270px);
   aspect-ratio: 1163 / 1724;
-  border: 1px solid rgba(182, 226, 255, 0.54);
-  border-radius: 11px;
+  border: 1px solid rgba(206, 236, 255, 0.58);
+  border-radius: 12px;
   background: #eef6ff;
   box-shadow:
-    0 24px 36px rgba(0, 0, 0, 0.36),
-    0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+    0 24px 46px rgba(0, 0, 0, 0.42),
+    0 7px 18px rgba(28, 109, 212, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
   object-fit: cover;
   object-position: top;
   opacity: var(--deck-opacity);
@@ -1035,7 +1069,7 @@ main {
 }
 
 .hero-card-deck:hover .hero-card-deck-image {
-  filter: saturate(1.05) brightness(1.04);
+  filter: saturate(1.03) brightness(1.035);
 }
 
 .hero-card-deck:active .hero-card-deck-image {
@@ -1050,8 +1084,8 @@ main {
 .hero-evidence-note {
   position: relative;
   z-index: 2;
-  margin: clamp(4px, 0.7vh, 10px) 0 0;
-  color: rgba(219, 239, 255, 0.78);
+  margin: 0;
+  color: rgba(219, 239, 255, 0.7);
   font-size: clamp(13px, 1vw, 16px);
   font-weight: 800;
   line-height: 1.35;
@@ -2960,19 +2994,32 @@ main {
   }
 
   .hero-evidence-board {
-    margin-top: 22px;
+    margin-top: 20px;
+    padding-top: 4px;
+  }
+
+  .hero-evidence-board::before {
+    width: 100%;
+    height: 70%;
+    border-radius: 14px;
+  }
+
+  .hero-evidence-board::after {
+    bottom: 22px;
+    width: 78%;
   }
 
   .hero-card-deck {
-    width: min(680px, 100%);
-    height: clamp(340px, 58vw, 430px);
+    width: min(640px, 100%);
+    height: clamp(315px, 53vw, 390px);
   }
 
   .hero-card-deck-image {
-    width: clamp(168px, 24vw, 232px);
+    top: 49%;
+    width: clamp(160px, 24vw, 218px);
   }
 
-  .hero-card-deck-image:nth-child(n + 10) {
+  .hero-card-deck-image:nth-child(n + 8) {
     display: none;
   }
 
@@ -3658,7 +3705,7 @@ main {
 
   .hero-card-deck {
     width: min(360px, 100%);
-    height: 330px;
+    height: 292px;
   }
 
   .hero-card-deck:hover {
@@ -3666,13 +3713,58 @@ main {
   }
 
   .hero-card-deck-image {
-    top: 47%;
-    width: clamp(150px, 42vw, 184px);
+    top: 48%;
+    width: clamp(142px, 41vw, 172px);
     border-radius: 9px;
   }
 
-  .hero-card-deck-image:nth-child(n + 8) {
+  .hero-card-deck-image:nth-child(n + 6) {
     display: none;
+  }
+
+  .hero-card-deck-image:nth-child(1) {
+    --deck-x: 0px !important;
+    --deck-y: -10px !important;
+    --deck-rotate: 0deg !important;
+    --deck-scale: 0.96 !important;
+    --deck-opacity: 1 !important;
+    --deck-z: 40 !important;
+  }
+
+  .hero-card-deck-image:nth-child(2) {
+    --deck-x: -74px !important;
+    --deck-y: 8px !important;
+    --deck-rotate: -6deg !important;
+    --deck-scale: 0.84 !important;
+    --deck-opacity: 0.9 !important;
+    --deck-z: 32 !important;
+  }
+
+  .hero-card-deck-image:nth-child(3) {
+    --deck-x: 74px !important;
+    --deck-y: 8px !important;
+    --deck-rotate: 6deg !important;
+    --deck-scale: 0.84 !important;
+    --deck-opacity: 0.9 !important;
+    --deck-z: 31 !important;
+  }
+
+  .hero-card-deck-image:nth-child(4) {
+    --deck-x: -126px !important;
+    --deck-y: 54px !important;
+    --deck-rotate: -12deg !important;
+    --deck-scale: 0.66 !important;
+    --deck-opacity: 0.42 !important;
+    --deck-z: 16 !important;
+  }
+
+  .hero-card-deck-image:nth-child(5) {
+    --deck-x: 126px !important;
+    --deck-y: 54px !important;
+    --deck-rotate: 12deg !important;
+    --deck-scale: 0.66 !important;
+    --deck-opacity: 0.42 !important;
+    --deck-z: 15 !important;
   }
 
   .hero-evidence-note {

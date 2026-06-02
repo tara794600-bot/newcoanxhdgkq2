@@ -764,21 +764,18 @@ const heroDeckCards: RollingImageCard[] = Object.entries(heroDeckImageModules)
     }
   })
 
-const HERO_DECK_VISIBLE_COUNT = 12
-const HERO_DECK_SHUFFLE_STEP = 5
+const HERO_DECK_VISIBLE_COUNT = 9
+const HERO_DECK_SHUFFLE_STEP = 1
 const HERO_DECK_CARD_STYLES = [
-  { x: '0px', y: '-6px', rotate: '-1deg', scale: '1', opacity: '1', z: 32 },
-  { x: '72px', y: '4px', rotate: '4.5deg', scale: '0.98', opacity: '0.96', z: 31 },
-  { x: '-76px', y: '8px', rotate: '-5deg', scale: '0.975', opacity: '0.94', z: 30 },
-  { x: '138px', y: '34px', rotate: '9deg', scale: '0.92', opacity: '0.78', z: 22 },
-  { x: '-142px', y: '38px', rotate: '-9deg', scale: '0.91', opacity: '0.76', z: 21 },
-  { x: '208px', y: '82px', rotate: '13deg', scale: '0.82', opacity: '0.48', z: 12 },
-  { x: '-210px', y: '88px', rotate: '-13deg', scale: '0.81', opacity: '0.48', z: 11 },
-  { x: '22px', y: '72px', rotate: '2deg', scale: '0.87', opacity: '0.42', z: 10 },
-  { x: '-26px', y: '112px', rotate: '-2deg', scale: '0.8', opacity: '0.34', z: 9 },
-  { x: '150px', y: '144px', rotate: '7deg', scale: '0.7', opacity: '0.28', z: 8 },
-  { x: '-150px', y: '148px', rotate: '-7deg', scale: '0.7', opacity: '0.28', z: 7 },
-  { x: '0px', y: '174px', rotate: '0deg', scale: '0.66', opacity: '0.22', z: 6 },
+  { x: '0px', y: '-18px', rotate: '0deg', scale: '1', opacity: '1', z: 40 },
+  { x: '-118px', y: '10px', rotate: '-6.5deg', scale: '0.92', opacity: '0.94', z: 34 },
+  { x: '118px', y: '10px', rotate: '6.5deg', scale: '0.92', opacity: '0.94', z: 33 },
+  { x: '-214px', y: '62px', rotate: '-12deg', scale: '0.78', opacity: '0.62', z: 20 },
+  { x: '214px', y: '62px', rotate: '12deg', scale: '0.78', opacity: '0.62', z: 19 },
+  { x: '-292px', y: '126px', rotate: '-17deg', scale: '0.64', opacity: '0.34', z: 11 },
+  { x: '292px', y: '126px', rotate: '17deg', scale: '0.64', opacity: '0.34', z: 10 },
+  { x: '-54px', y: '154px', rotate: '-3deg', scale: '0.66', opacity: '0.26', z: 8 },
+  { x: '54px', y: '154px', rotate: '3deg', scale: '0.66', opacity: '0.26', z: 7 },
 ] as const
 
 const getHeroDeckCardStyle = (index: number): CSSProperties => {
@@ -1499,6 +1496,22 @@ function App() {
   const handleHeroDeckShuffle = () => {
     setHeroDeckShuffleIndex((currentIndex) => currentIndex + 1)
   }
+
+  useEffect(() => {
+    if (route !== 'home' || heroDeckCards.length <= 1) {
+      return
+    }
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setHeroDeckShuffleIndex((currentIndex) => currentIndex + 1)
+    }, 2000)
+
+    return () => window.clearInterval(intervalId)
+  }, [route])
 
   useEffect(() => {
     const legacyRoute = resolveLegacyHashRoute(window.location.hash)
@@ -3590,7 +3603,7 @@ function App() {
                     </button>
 
                     <p className="hero-evidence-note">
-                      카드를 눌러 실제 대응 자료를 넘겨보세요.
+                      실제 대응 자료가 2초마다 한 장씩 넘어갑니다.
                     </p>
                   </div>
                 ) : null}
