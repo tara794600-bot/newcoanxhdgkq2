@@ -23,8 +23,6 @@ import {
 } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import heroImg from './assets/hero.png'
-import i1Img from './assets/i1.png'
-import i2Img from './assets/i2.png'
 import picImg from './assets/pic-purple.png'
 import icon1Img from './assets/icon1-purple.png'
 import icon2Img from './assets/icon2-purple.png'
@@ -34,9 +32,9 @@ import ssImg from './assets/ss-purple.png'
 import logoImg from './assets/logo.png'
 import kakaoIconImg from './assets/kakao.png'
 import naranKakaoBannerImg from './assets/나란kakao.jpg'
-import law1Img from './assets/law1-purple.png'
-import law2Img from './assets/law2-purple.png'
-import law3Img from './assets/law3-purple.png'
+import law1Img from './assets/law1.png'
+import law2Img from './assets/law2.png'
+import law3Img from './assets/law3.png'
 import bannerImg from './assets/banner-purple.png'
 import { auth, db, isFirebaseConfigured, storage } from './firebase'
 import './App.css'
@@ -74,6 +72,14 @@ type RollingDisplayCase = RollingCase & {
 }
 
 type RollingDisplayItem = RollingImageCard | RollingDisplayCase
+
+type HeroEvidenceCase = {
+  caseLabel: string
+  title: string
+  status: string
+  stamp: string
+  image: RollingImageCard
+}
 
 type CompanyCase = {
   id: string
@@ -123,7 +129,7 @@ const CONTACT_PHONE_TEL = `tel:${CONTACT_PHONE_NUMBER.replace(/[^0-9+]/g, '')}`
 const GOOGLE_ADS_ID = 'AW-16949684264'
 const GOOGLE_ADS_CONVERSION_SEND_TO = 'AW-16949684264/I91fCL6M-qMcEKjQnpI_'
 const GOOGLE_ADS_SCRIPT_ID = 'google-ads-gtag-script'
-const HERO_TYPING_TEXT = '나란에서 해결할 수 없다면\n그\u00A0어디서도\u00A0해결할\u00A0수\u00A0없습니다.'
+const HERO_TYPING_TEXT = '피해금 회복은\n고소 전 전략 설계부터 시작됩니다.'
 const COMPANIES_BANNER_TYPING_TEXT_DESKTOP =
   '경찰신고만으로는 피해금을 되찾을 수 없습니다.\n지금 바로 대응해 피해금 회복이 가능합니다.'
 const COMPANIES_BANNER_TYPING_TEXT_MOBILE =
@@ -744,6 +750,68 @@ const rollingFolderDefaultCards: RollingImageCard[] = Object.entries(rollingImag
   })
 
 const defaultRollingCards = rollingFolderDefaultCards
+
+const findDefaultRollingCardByName = (namePart: string): RollingImageCard | undefined =>
+  rollingFolderDefaultCards.find((item) => item.imageAlt.includes(namePart))
+
+const getDefaultRollingCard = (namePart: string, fallbackIndex: number): RollingImageCard | null =>
+  findDefaultRollingCardByName(namePart) ?? rollingFolderDefaultCards[fallbackIndex] ?? null
+
+const isRollingImageCard = (item: RollingImageCard | null): item is RollingImageCard => Boolean(item)
+
+const HERO_EVIDENCE_CASES = [
+  {
+    caseLabel: 'CASE 01',
+    title: '합의로 이어진 피해금 회복',
+    status: '합의서 확보',
+    stamp: '회복',
+    imageName: '합의서-2000',
+    fallbackIndex: 16,
+  },
+  {
+    caseLabel: 'CASE 02',
+    title: '민사판결로 책임 확정',
+    status: '판결문 확보',
+    stamp: '승소',
+    imageName: '민사판결-1억',
+    fallbackIndex: 5,
+  },
+  {
+    caseLabel: 'CASE 03',
+    title: '사기 가담자 형사절차 진행',
+    status: '구속구공판',
+    stamp: '진행',
+    imageName: '통지서-사기-구속구공판',
+    fallbackIndex: 9,
+  },
+]
+  .map((item): HeroEvidenceCase | null => {
+    const image = getDefaultRollingCard(item.imageName, item.fallbackIndex)
+
+    if (!image) {
+      return null
+    }
+
+    return {
+      caseLabel: item.caseLabel,
+      title: item.title,
+      status: item.status,
+      stamp: item.stamp,
+      image,
+    }
+  })
+  .filter((item): item is HeroEvidenceCase => Boolean(item))
+
+const HERO_EVIDENCE_WALL_CARDS = [
+  getDefaultRollingCard('강제조정1-1', 0),
+  getDefaultRollingCard('공정증서1-1', 2),
+  getDefaultRollingCard('본압류-4300', 6),
+  getDefaultRollingCard('제3채무자진술서-6100', 7),
+  getDefaultRollingCard('통지서-통신사기피해환급법-불구속구공판', 12),
+  getDefaultRollingCard('형사판결-방조1-1', 17),
+  getDefaultRollingCard('형사판결-범단1', 19),
+  getDefaultRollingCard('민사판결-1000', 4),
+].filter(isRollingImageCard)
 
 const activeScamCases = [
   {
@@ -3477,13 +3545,14 @@ function App() {
             <section className="hero-section">
               <div className="hero-inner section-wrap">
                 <div className="hero-copy">
+                  <span className="hero-alert-mark" aria-hidden="true" />
                   <p className="hero-eyebrow hero-eyebrow-nowrap">
-                    대규모 사기 사건, 비상장주식부터 보이스피싱 단체 사기까지
+                    VIP·투자·로맨스스캠 사칭 피해, 신고만으로 끝내지 마세요
                   </p>
                   {landingPowerlinkKeyword ? (
                     <p className="hero-keyword-highlight">{landingPowerlinkKeyword}</p>
                   ) : null}
-                  <h1 aria-label="나란에서 해결할 수 없다면 그 어디서도 해결할 수 없습니다.">
+                  <h1 aria-label="피해금 회복은 고소 전 전략 설계부터 시작됩니다.">
                     <span className="hero-typing-text">{heroTypedText || '\u00A0'}</span>
                     {showHeroTypingCursor ? (
                       <span className="hero-typing-cursor" aria-hidden="true">
@@ -3491,6 +3560,38 @@ function App() {
                       </span>
                     ) : null}
                   </h1>
+                  <p className="hero-subcopy">
+                    잘못된 초기 대응은 <strong>수사중지·불송치·무혐의</strong>로 이어질 수 있습니다.
+                    나란은 접수 전부터 진술 방향과 입증 계획을 먼저 세웁니다.
+                  </p>
+                </div>
+
+                <div className="hero-evidence-board" aria-label="법무법인 나란 실제 진행 사례 자료">
+                  <div className="hero-evidence-wall" aria-hidden="true">
+                    {HERO_EVIDENCE_WALL_CARDS.map((item) => (
+                      <img src={item.image} alt="" key={`hero-wall-${item.id}`} />
+                    ))}
+                  </div>
+
+                  <div className="hero-evidence-main">
+                    {HERO_EVIDENCE_CASES.map((item) => (
+                      <article className="hero-evidence-card" key={item.caseLabel}>
+                        <div className="hero-evidence-card-head">
+                          <p>{item.caseLabel}</p>
+                          <span>{item.status}</span>
+                        </div>
+                        <h2>{item.title}</h2>
+                        <div className="hero-evidence-image-wrap">
+                          <img src={item.image.image} alt={item.image.imageAlt} />
+                          <strong>{item.stamp}</strong>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  <p className="hero-evidence-note">
+                    피해자의 목숨 같은 돈, 나란은 고소 전 승소 전략부터 세웁니다.
+                  </p>
                 </div>
 
                 <div className="hero-stats-bar" ref={heroStatsBarRef} aria-label="상담 및 해결 통계">
@@ -3507,32 +3608,6 @@ function App() {
                 <a className="hero-cta" href={getRoutePath('home')} onClick={handleConsultingNavigation}>
                   피해 사실 접수
                 </a>
-
-                <div className="hero-experts">
-                  <article className="expert-card expert-card-left">
-                    <img
-                      className="expert-thumb expert-thumb-avatar"
-                      src={i1Img}
-                      alt="서지원 변호사 프로필"
-                    />
-                    <div>
-                      <h3>투자사기 피해회복 전문</h3>
-                      <p>서지원 변호사</p>
-                    </div>
-                  </article>
-
-                  <article className="expert-card expert-card-right">
-                    <img
-                      className="expert-thumb expert-thumb-logo"
-                      src={i2Img}
-                      alt="법무법인 나란 엠블럼"
-                    />
-                    <div>
-                      <h3>핀테크 전문</h3>
-                      <p>법무법인 나란</p>
-                    </div>
-                  </article>
-                </div>
               </div>
             </section>
 
