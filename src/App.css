@@ -833,7 +833,11 @@ main {
   width: 58px;
   height: 52px;
   margin: 0 auto clamp(14px, 2vh, 22px);
-  filter: drop-shadow(0 0 18px rgba(255, 76, 96, 0.42));
+  filter:
+    drop-shadow(0 0 10px rgba(255, 42, 67, 0.82))
+    drop-shadow(0 0 26px rgba(255, 42, 67, 0.52))
+    drop-shadow(0 0 48px rgba(255, 42, 67, 0.26));
+  animation: hero-alert-neon-pulse 1.65s ease-in-out infinite;
 }
 
 .hero-alert-mark::before {
@@ -842,6 +846,9 @@ main {
   inset: 2px 0 0;
   background: linear-gradient(180deg, rgba(255, 72, 92, 0.96) 0%, rgba(170, 24, 45, 0.9) 100%);
   clip-path: polygon(50% 0, 100% 92%, 0 92%);
+  box-shadow:
+    0 0 16px rgba(255, 54, 76, 0.78),
+    0 0 38px rgba(255, 54, 76, 0.38);
 }
 
 .hero-alert-mark::after {
@@ -854,6 +861,35 @@ main {
   font-size: 31px;
   font-weight: 900;
   line-height: 1;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.84),
+    0 0 18px rgba(255, 77, 95, 0.72);
+}
+
+@keyframes hero-alert-neon-pulse {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: scale(0.98);
+    filter:
+      drop-shadow(0 0 8px rgba(255, 42, 67, 0.68))
+      drop-shadow(0 0 22px rgba(255, 42, 67, 0.42))
+      drop-shadow(0 0 38px rgba(255, 42, 67, 0.2));
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(1.04);
+    filter:
+      drop-shadow(0 0 14px rgba(255, 54, 78, 0.96))
+      drop-shadow(0 0 34px rgba(255, 54, 78, 0.68))
+      drop-shadow(0 0 68px rgba(255, 54, 78, 0.36));
+  }
+
+  55% {
+    opacity: 0.72;
+    transform: scale(0.99);
+  }
 }
 
 .hero-eyebrow {
@@ -4023,6 +4059,10 @@ main {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .hero-alert-mark {
+    animation: none;
   }
 
   .floating-action-btn {
