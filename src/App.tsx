@@ -23,24 +23,25 @@ import {
 } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import heroImg from './assets/hero.png'
-import picImg from './assets/pic-purple.png'
-import icon1Img from './assets/icon1-purple.png'
-import icon2Img from './assets/icon2-purple.png'
-import icon3Img from './assets/icon3-purple.png'
-import icon4Img from './assets/icon4-purple.png'
-import ssImg from './assets/ss-purple.png'
+import picImg from './assets/pic.png'
+import icon1Img from './assets/icon1.png'
+import icon2Img from './assets/icon2.png'
+import icon3Img from './assets/icon3.png'
+import icon4Img from './assets/icon4.png'
+import ssImg from './assets/ss.png'
 import logoImg from './assets/logo.png'
 import kakaoIconImg from './assets/kakao.png'
 import naranKakaoBannerImg from './assets/나란kakao.jpg'
 import law1Img from './assets/law1.png'
 import law2Img from './assets/law2.png'
 import law3Img from './assets/law3.png'
-import bannerImg from './assets/banner-purple.png'
+import bannerImg from './assets/banner.png'
 import { auth, db, isFirebaseConfigured, storage } from './firebase'
 import './App.css'
 
 type PageRoute = 'home' | 'lawyers' | 'companies' | 'admin'
 type AuthViewMode = 'login' | 'signup'
+type ConsultationYesNo = '' | 'yes' | 'no'
 type VisitSource = '' | 'naver' | 'google'
 type GoogleTag = (...args: unknown[]) => void
 
@@ -120,7 +121,7 @@ const CONTACT_PHONE_TEL = `tel:${CONTACT_PHONE_NUMBER.replace(/[^0-9+]/g, '')}`
 const GOOGLE_ADS_ID = 'AW-16949684264'
 const GOOGLE_ADS_CONVERSION_SEND_TO = 'AW-16949684264/I91fCL6M-qMcEKjQnpI_'
 const GOOGLE_ADS_SCRIPT_ID = 'google-ads-gtag-script'
-const HERO_TYPING_TEXT = '피해금 회복은\n고소 전 전략 설계부터 시작됩니다.'
+const HERO_TYPING_TEXT = '수많은 사기 피해 대응 경험,\n그 차이를 증명합니다.'
 const COMPANIES_BANNER_TYPING_TEXT_DESKTOP =
   '경찰신고만으로는 피해금을 되찾을 수 없습니다.\n지금 바로 대응해 피해금 회복이 가능합니다.'
 const COMPANIES_BANNER_TYPING_TEXT_MOBILE =
@@ -763,21 +764,18 @@ const heroDeckCards: RollingImageCard[] = Object.entries(heroDeckImageModules)
     }
   })
 
-const HERO_DECK_VISIBLE_COUNT = 12
-const HERO_DECK_SHUFFLE_STEP = 5
+const HERO_DECK_VISIBLE_COUNT = 9
+const HERO_DECK_SHUFFLE_STEP = 1
 const HERO_DECK_CARD_STYLES = [
-  { x: '0px', y: '-6px', rotate: '-1deg', scale: '1', opacity: '1', z: 32 },
-  { x: '72px', y: '4px', rotate: '4.5deg', scale: '0.98', opacity: '0.96', z: 31 },
-  { x: '-76px', y: '8px', rotate: '-5deg', scale: '0.975', opacity: '0.94', z: 30 },
-  { x: '138px', y: '34px', rotate: '9deg', scale: '0.92', opacity: '0.78', z: 22 },
-  { x: '-142px', y: '38px', rotate: '-9deg', scale: '0.91', opacity: '0.76', z: 21 },
-  { x: '208px', y: '82px', rotate: '13deg', scale: '0.82', opacity: '0.48', z: 12 },
-  { x: '-210px', y: '88px', rotate: '-13deg', scale: '0.81', opacity: '0.48', z: 11 },
-  { x: '22px', y: '72px', rotate: '2deg', scale: '0.87', opacity: '0.42', z: 10 },
-  { x: '-26px', y: '112px', rotate: '-2deg', scale: '0.8', opacity: '0.34', z: 9 },
-  { x: '150px', y: '144px', rotate: '7deg', scale: '0.7', opacity: '0.28', z: 8 },
-  { x: '-150px', y: '148px', rotate: '-7deg', scale: '0.7', opacity: '0.28', z: 7 },
-  { x: '0px', y: '174px', rotate: '0deg', scale: '0.66', opacity: '0.22', z: 6 },
+  { x: '0px', y: '-18px', rotate: '0deg', scale: '1', opacity: '1', z: 40 },
+  { x: '-118px', y: '10px', rotate: '-6.5deg', scale: '0.92', opacity: '0.94', z: 34 },
+  { x: '118px', y: '10px', rotate: '6.5deg', scale: '0.92', opacity: '0.94', z: 33 },
+  { x: '-214px', y: '62px', rotate: '-12deg', scale: '0.78', opacity: '0.62', z: 20 },
+  { x: '214px', y: '62px', rotate: '12deg', scale: '0.78', opacity: '0.62', z: 19 },
+  { x: '-292px', y: '126px', rotate: '-17deg', scale: '0.64', opacity: '0.34', z: 11 },
+  { x: '292px', y: '126px', rotate: '17deg', scale: '0.64', opacity: '0.34', z: 10 },
+  { x: '-54px', y: '154px', rotate: '-3deg', scale: '0.66', opacity: '0.26', z: 8 },
+  { x: '54px', y: '154px', rotate: '3deg', scale: '0.66', opacity: '0.26', z: 7 },
 ] as const
 
 const getHeroDeckCardStyle = (index: number): CSSProperties => {
@@ -1239,6 +1237,7 @@ function App() {
   const companyDetailStackedRef = useRef(false)
   const shouldScrollToQuickFormRef = useRef(false)
   const adminEnrollmentInProgressRef = useRef(false)
+  const ineligibleIncidentBlockInProgressRef = useRef(false)
 
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authMode, setAuthMode] = useState<AuthViewMode>('login')
@@ -1284,6 +1283,8 @@ function App() {
   const [consultationNameInput, setConsultationNameInput] = useState('')
   const [consultationPhoneInput, setConsultationPhoneInput] = useState('')
   const [consultationDetailsInput, setConsultationDetailsInput] = useState('')
+  const [consultationAfter2025Input, setConsultationAfter2025Input] = useState<ConsultationYesNo>('')
+  const [consultationAfter2025Locked, setConsultationAfter2025Locked] = useState(false)
   const [consultationPrivacyAgreed, setConsultationPrivacyAgreed] = useState(false)
   const [consultationBusy, setConsultationBusy] = useState(false)
   const [consultationNotice, setConsultationNotice] = useState('')
@@ -1489,11 +1490,28 @@ function App() {
     () => getShiftedHeroDeckCards(heroDeckShuffleIndex),
     [heroDeckShuffleIndex],
   )
-  const consultationSubmitDisabled = consultationBusy || !consultationPrivacyAgreed
+  const consultationSubmitDisabled =
+    consultationBusy || consultationAfter2025Input === 'no' || !consultationPrivacyAgreed
 
   const handleHeroDeckShuffle = () => {
     setHeroDeckShuffleIndex((currentIndex) => currentIndex + 1)
   }
+
+  useEffect(() => {
+    if (route !== 'home' || heroDeckCards.length <= 1) {
+      return
+    }
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setHeroDeckShuffleIndex((currentIndex) => currentIndex + 1)
+    }, 2000)
+
+    return () => window.clearInterval(intervalId)
+  }, [route])
 
   useEffect(() => {
     const legacyRoute = resolveLegacyHashRoute(window.location.hash)
@@ -2429,6 +2447,75 @@ function App() {
     setConsultationPhoneInput(onlyDigits)
   }
 
+  const blockConsultationIpForIneligibleIncident = async () => {
+    if (ineligibleIncidentBlockInProgressRef.current) {
+      return
+    }
+
+    ineligibleIncidentBlockInProgressRef.current = true
+    const endpoint = CONSULTATION_API_URL || '/api/consultation'
+    const queryString = window.location.search || ''
+    const referrer = document.referrer || ''
+    const userAgent = navigator.userAgent
+    const visitSource = detectVisitSource({
+      landingToken,
+      queryString,
+      referrer,
+      userAgent,
+    })
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'block-ineligible-incident',
+          incidentAfter2025: 'no',
+          source: isNaverPowerlinkVisit ? 'naver-powerlink' : 'website-quick-form',
+          pagePath: getRoutePath(route),
+          landingPath,
+          landingToken,
+          queryString,
+          referrer,
+          userAgent,
+          visitSource,
+        }),
+      })
+
+      const responseBody = (await response.json().catch(() => null)) as
+        | { ok?: boolean; message?: string }
+        | null
+
+      if (!response.ok || !responseBody?.ok) {
+        throw new Error(responseBody?.message ?? 'IP 차단 처리에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      ineligibleIncidentBlockInProgressRef.current = false
+    }
+  }
+
+  const handleConsultationAfter2025Change = (value: Exclude<ConsultationYesNo, ''>) => {
+    if (consultationAfter2025Locked) {
+      return
+    }
+
+    setConsultationAfter2025Input(value)
+    setConsultationNotice('')
+
+    if (value === 'no') {
+      setConsultationAfter2025Locked(true)
+      setConsultationError('2025년 이후 사건만 신청할 수 있습니다.')
+      void blockConsultationIpForIneligibleIncident()
+      return
+    }
+
+    setConsultationError('')
+  }
+
   const handleConsultationSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setConsultationError('')
@@ -2437,6 +2524,13 @@ function App() {
     const name = consultationNameInput.trim().replace(/\s+/g, '')
     const phone = consultationPhoneInput.trim().replace(/[^0-9]/g, '')
     const details = consultationDetailsInput.trim()
+
+    if (consultationAfter2025Input !== 'yes') {
+      const message = '2025년 이후 사건만 신청할 수 있습니다.'
+      setConsultationError(message)
+      window.alert(message)
+      return
+    }
 
     if (!name || !phone || !details) {
       window.alert('이름, 연락처, 피해 내용을 모두 입력해주세요.')
@@ -2487,6 +2581,7 @@ function App() {
           name,
           phone,
           details,
+          incidentAfter2025: consultationAfter2025Input,
           source: isNaverPowerlinkVisit ? 'naver-powerlink' : 'website-quick-form',
           pagePath: getRoutePath(route),
           landingPath,
@@ -2510,6 +2605,8 @@ function App() {
       setConsultationNameInput('')
       setConsultationPhoneInput('')
       setConsultationDetailsInput('')
+      setConsultationAfter2025Input('')
+      setConsultationAfter2025Locked(false)
       setConsultationPrivacyAgreed(false)
       sendGoogleAdsConsultationConversion()
       window.alert('신청이 완료되었습니다.')
@@ -2520,6 +2617,43 @@ function App() {
       setConsultationBusy(false)
     }
   }
+
+  const renderConsultationChoiceFields = (namePrefix: string) => (
+    <>
+      <div
+        className={`consultation-choice-field ${
+          consultationAfter2025Locked ? 'consultation-choice-field-disabled' : ''
+        }`}
+        role="radiogroup"
+        aria-labelledby={`${namePrefix}-incident-after-2025-title`}
+      >
+        <p className="consultation-choice-title" id={`${namePrefix}-incident-after-2025-title`}>
+          25년 이후 사건입니까
+        </p>
+        <div className="consultation-choice-options">
+          {(['yes', 'no'] as const).map((value) => (
+            <label
+              className={`consultation-choice-option ${
+                consultationBusy || consultationAfter2025Locked ? 'consultation-choice-option-disabled' : ''
+              }`}
+              key={`${namePrefix}-incident-after-2025-${value}`}
+            >
+              <input
+                type="radio"
+                name={`${namePrefix}-incident-after-2025`}
+                value={value}
+                checked={consultationAfter2025Input === value}
+                onChange={() => handleConsultationAfter2025Change(value)}
+                required
+                disabled={consultationBusy || consultationAfter2025Locked}
+              />
+              <span>{value === 'yes' ? '예' : '아니요'}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </>
+  )
 
   const renderConsultationPrivacyAgreement = (namePrefix: string) => (
     <label className="consultation-privacy-agreement" htmlFor={`${namePrefix}-privacy-agreement`}>
@@ -3427,7 +3561,7 @@ function App() {
             <section className="hero-section">
               <div className="hero-inner section-wrap">
                 <div className="hero-copy">
-                  <span className="hero-alert-mark" aria-hidden="true" />
+        
                   <p className="hero-eyebrow hero-eyebrow-nowrap">
                     VIP·투자·로맨스스캠 사칭 피해, 신고만으로 끝내지 마세요
                   </p>
@@ -3443,7 +3577,7 @@ function App() {
                     ) : null}
                   </h1>
                   <p className="hero-subcopy">
-                    잘못된 초기 대응은 <strong>수사중지·불송치·무혐의</strong>로 이어질 수 있습니다.
+                    잘못된 초기 대응은 <strong>수사중지·불송치·무혐의</strong>로 이어질 수 있습니다.<br/>
                     나란은 접수 전부터 진술 방향과 입증 계획을 먼저 세웁니다.
                   </p>
                 </div>
@@ -3469,7 +3603,6 @@ function App() {
                     </button>
 
                     <p className="hero-evidence-note">
-                      카드를 눌러 실제 대응 자료를 넘겨보세요.
                     </p>
                   </div>
                 ) : null}
@@ -3684,6 +3817,7 @@ function App() {
                     required
                     disabled={consultationBusy}
                   />
+                  {renderConsultationChoiceFields('main-consultation')}
                   <textarea
                     rows={4}
                     value={consultationDetailsInput}
@@ -3978,6 +4112,7 @@ function App() {
                 required
                 disabled={consultationBusy}
               />
+              {renderConsultationChoiceFields('bottom-consultation')}
               <textarea
                 rows={1}
                 value={consultationDetailsInput}
