@@ -6,10 +6,10 @@
       "has": [
         {
           "type": "host",
-          "value": "naranfintech.com"
+          "value": "naranfintechnews.co.kr"
         }
       ],
-      "destination": "https://www.naranfintech.com/:path*",
+      "destination": "https://www.naranfintechnews.co.kr/:path*",
       "permanent": true
     }
   ],

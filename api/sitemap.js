@@ -71,7 +71,7 @@ const toDateString = (value) => {
     }
   }
 
-  return new Date().toISOString().slice(0, 10)
+  return ''
 }
 
 const getCompanyCaseUrls = async () => {
@@ -98,45 +98,29 @@ const getCompanyCaseUrls = async () => {
     .sort((a, b) => a.loc.localeCompare(b.loc))
 }
 
-const renderUrl = ({ loc, lastmod, changefreq, priority }) => `  <url>
-    <loc>${escapeXml(loc)}</loc>
-    <lastmod>${escapeXml(lastmod)}</lastmod>
-    <changefreq>${escapeXml(changefreq)}</changefreq>
-    <priority>${escapeXml(priority)}</priority>
+const renderUrl = ({ loc, lastmod }) => `  <url>
+    <loc>${escapeXml(loc)}</loc>${lastmod ? `\n    <lastmod>${escapeXml(lastmod)}</lastmod>` : ''}
   </url>`
 
-const renderSitemap = (companyUrls) => {
-  const today = new Date().toISOString().slice(0, 10)
+export const renderSitemap = (companyUrls) => {
+  const latestCompanyLastmod = companyUrls.reduce(
+    (latest, item) => (item.lastmod && item.lastmod > latest ? item.lastmod : latest),
+    '',
+  )
   const urls = [
     {
       loc: `${SITE_BASE_URL}/`,
       lastmod: '2026-05-08',
-      changefreq: 'weekly',
-      priority: '1.0',
     },
     {
       loc: `${SITE_BASE_URL}/lawyers`,
       lastmod: '2026-05-08',
-      changefreq: 'monthly',
-      priority: '0.8',
     },
     {
       loc: `${SITE_BASE_URL}/companies`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.8',
+      lastmod: latestCompanyLastmod,
     },
-    ...companyUrls.map((item) => ({
-      ...item,
-      changefreq: 'weekly',
-      priority: '0.7',
-    })),
-    {
-      loc: `${SITE_BASE_URL}/rss.xml`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.3',
-    },
+    ...companyUrls,
   ]
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -158,6 +142,9 @@ export default async function handler(req, res) {
     companyUrls = await getCompanyCaseUrls()
   } catch (error) {
     console.error('[api/sitemap] Firestore read failed', error)
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Retry-After', '60')
+    return res.status(503).end('Service Unavailable')
   }
 
   const sitemap = renderSitemap(companyUrls)

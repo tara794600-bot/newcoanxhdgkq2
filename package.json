@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build && node scripts/remove-static-sitemap.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
+    "verify:seo": "node scripts/verify-seo-rendering.mjs",
     "powerlink:url": "node scripts/generate-powerlink-url.mjs"
   },
   "dependencies": {

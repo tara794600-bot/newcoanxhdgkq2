@@ -18,6 +18,8 @@ const COMPANIES_PAGE_DESCRIPTION =
   '투자사기, 부업사기, 로맨스스캠 등 실제 사기업체 사례를 게시판 형식으로 확인하고 피해회복 상담을 신청하세요.'
 const COMPANIES_PAGE_KEYWORDS =
   '사기업체 게시판, 사기업체 사례 게시판, 사기 업체 게시판, 사기 피해 게시판, 사기업체 목록, 사기 피해 사례, 피해회복 상담, 법무법인 나란'
+const COMPANY_CASES_PER_PAGE = 40
+const COMPANY_SEARCH_MAX_LENGTH = 120
 
 const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -115,6 +117,91 @@ const escapeHtml = (value) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
+const escapeJsonForHtml = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
+
+const replaceRootContent = (html, content) => {
+  const rootRegex = /<div\s+id=["']root["']\s*>[\s\S]*?<\/div>/i
+  const root = `<div id="root">${content}</div>`
+
+  if (rootRegex.test(html)) {
+    return html.replace(rootRegex, root)
+  }
+
+  return html.replace('</body>', `  ${root}\n  </body>`)
+}
+
+const replaceOrInsertBootstrapData = (html, data) => {
+  const tag = `<script id="company-page-data">window.__COMPANY_PAGE_DATA__=${escapeJsonForHtml(data)}</script>`
+  const regex = /<script\s+[^>]*id=["']company-page-data["'][^>]*>[\s\S]*?<\/script>/i
+
+  if (regex.test(html)) {
+    return html.replace(regex, tag)
+  }
+
+  return upsertHeadTag(html, tag)
+}
+
+const renderDescriptionParagraphs = (description) => {
+  const paragraphs = String(description)
+    .split(/\r?\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
+  if (paragraphs.length === 0) {
+    return '<p class="company-detail-description"></p>'
+  }
+
+  return paragraphs
+    .map((paragraph) => `<p class="company-detail-description">${escapeHtml(paragraph)}</p>`)
+    .join('\n')
+}
+
+const getCompaniesPagePath = (page, searchQuery = '') => {
+  const params = new URLSearchParams()
+
+  if (page > 1) {
+    params.set('page', String(page))
+  }
+
+  if (searchQuery) {
+    params.set('q', searchQuery)
+  }
+
+  const queryString = params.toString()
+  return queryString ? `${COMPANIES_PAGE_PATH}?${queryString}` : COMPANIES_PAGE_PATH
+}
+
+const getPaginationItems = (totalPages, currentPage) => {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1)
+  }
+
+  const visiblePages = new Set([1, totalPages, currentPage, currentPage - 1, currentPage + 1])
+
+  if (currentPage <= 4) {
+    const leadingPages = [2, 3, 4]
+    leadingPages.forEach((page) => visiblePages.add(page))
+  } else if (currentPage >= totalPages - 3) {
+    const trailingPages = [totalPages - 3, totalPages - 2, totalPages - 1]
+    trailingPages.forEach((page) => visiblePages.add(page))
+  }
+
+  const pages = Array.from(visiblePages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((a, b) => a - b)
+
+  return pages.reduce((items, page, index) => {
+    const previousPage = pages[index - 1]
+
+    if (previousPage && page - previousPage > 1) {
+      items.push(page - previousPage === 2 ? previousPage + 1 : `ellipsis-${page}`)
+    }
+
+    items.push(page)
+    return items
+  }, [])
+}
+
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const toAbsoluteUrl = (value) => {
@@ -201,14 +288,7 @@ const getCompaniesBreadcrumbStructuredData = (canonicalUrl, companyCase = null) 
   ],
 })
 
-const getCompanyCase = async (id) => {
-  const app = getFirebaseApp()
-  const snapshot = await getFirestore(app).collection('companyCases').doc(id).get()
-
-  if (!snapshot.exists) {
-    return null
-  }
-
+const mapCompanyCase = (snapshot) => {
   const data = snapshot.data() ?? {}
   const name = toTrimmedString(data.name)
   const service = toTrimmedString(data.service)
@@ -224,23 +304,206 @@ const getCompanyCase = async (id) => {
     name,
     service,
     description,
-    image,
+    image: image || DEFAULT_IMAGE_URL,
   }
 }
 
-const applyCompaniesPageSeo = (html) => {
-  const canonicalUrl = `${SITE_BASE_URL}${COMPANIES_PAGE_PATH}`
+const getCompanyCase = async (id) => {
+  const app = getFirebaseApp()
+  const snapshot = await getFirestore(app).collection('companyCases').doc(id).get()
 
-  let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(COMPANIES_PAGE_TITLE)}</title>`)
+  if (!snapshot.exists) {
+    return null
+  }
+
+  return mapCompanyCase(snapshot)
+}
+
+const getCompaniesPage = async ({ page, searchQuery }) => {
+  const app = getFirebaseApp()
+  const collectionRef = getFirestore(app).collection('companyCases')
+  let items = []
+  let totalCount = 0
+
+  if (searchQuery) {
+    const snapshot = await collectionRef.orderBy('createdAt', 'desc').get()
+    const normalizedSearchQuery = searchQuery.toLocaleLowerCase('ko-KR')
+    const matchedItems = snapshot.docs
+      .map(mapCompanyCase)
+      .filter(Boolean)
+      .filter((item) =>
+        [item.name, item.service, item.description].some((value) =>
+          value.toLocaleLowerCase('ko-KR').includes(normalizedSearchQuery),
+        ),
+      )
+
+    totalCount = matchedItems.length
+    const startIndex = (page - 1) * COMPANY_CASES_PER_PAGE
+    items = matchedItems.slice(startIndex, startIndex + COMPANY_CASES_PER_PAGE)
+  } else {
+    const countSnapshot = await collectionRef.count().get()
+    totalCount = countSnapshot.data().count
+
+    if (totalCount > 0) {
+      const offset = (page - 1) * COMPANY_CASES_PER_PAGE
+      const snapshot = await collectionRef
+        .orderBy('createdAt', 'desc')
+        .offset(offset)
+        .limit(COMPANY_CASES_PER_PAGE)
+        .get()
+      items = snapshot.docs.map(mapCompanyCase).filter(Boolean)
+    }
+  }
+
+  return {
+    items,
+    page,
+    searchQuery,
+    totalCount,
+    totalPages: Math.max(1, Math.ceil(totalCount / COMPANY_CASES_PER_PAGE)),
+  }
+}
+
+const renderPagination = ({ page, totalPages, searchQuery }) => {
+  if (totalPages <= 1) {
+    return ''
+  }
+
+  const renderPageLink = (targetPage, label, extraClass = '') => {
+    const className = `company-page-button${extraClass ? ` ${extraClass}` : ''}${
+      targetPage === page ? ' is-active' : ''
+    }`
+    const href = escapeHtml(getCompaniesPagePath(targetPage, searchQuery))
+    const ariaCurrent = targetPage === page ? ' aria-current="page"' : ''
+    return `<a class="${className}" href="${href}"${ariaCurrent}>${escapeHtml(label)}</a>`
+  }
+
+  const previous =
+    page > 1
+      ? renderPageLink(page - 1, '‹', 'company-page-arrow')
+      : '<span class="company-page-button company-page-arrow is-disabled" aria-hidden="true">‹</span>'
+  const next =
+    page < totalPages
+      ? renderPageLink(page + 1, '›', 'company-page-arrow')
+      : '<span class="company-page-button company-page-arrow is-disabled" aria-hidden="true">›</span>'
+  const pages = getPaginationItems(totalPages, page)
+    .map((item) =>
+      typeof item === 'number'
+        ? renderPageLink(item, String(item))
+        : '<span class="company-page-ellipsis" aria-hidden="true">...</span>',
+    )
+    .join('\n')
+
+  return `<nav class="company-pagination" aria-label="사기업체 게시물 페이지">
+    ${previous}
+    ${pages}
+    ${next}
+  </nav>`
+}
+
+const renderCompaniesServerContent = (pageData) => {
+  const cards = pageData.items.length
+    ? pageData.items
+        .map(
+          (item) => `<a class="company-card company-card-filled company-card-link" href="${escapeHtml(
+            `/companies/${encodeURIComponent(item.id)}`,
+          )}">
+            <div class="company-card-thumb-wrap">
+              <img src="${escapeHtml(toAbsoluteUrl(item.image) || DEFAULT_IMAGE_URL)}" alt="${escapeHtml(
+                `${item.name} 이미지`,
+              )}" class="company-card-image" loading="lazy" />
+            </div>
+            <p class="company-card-name">${escapeHtml(item.name)}</p>
+          </a>`,
+        )
+        .join('\n')
+    : '<p class="companies-empty">검색 결과가 없습니다.</p>'
+  const searchValue = escapeHtml(pageData.searchQuery)
+
+  return `<div class="app-shell">
+    <main>
+      <section class="companies-page" aria-label="사기업체 사례">
+        <div class="section-wrap companies-grid-wrap">
+          <nav aria-label="경로"><a href="/">홈</a> &gt; <a href="/companies">사기업체 게시판</a></nav>
+          <h1>${escapeHtml(
+            pageData.searchQuery
+              ? `“${pageData.searchQuery}” 검색 결과`
+              : pageData.page > 1
+                ? `사기업체 게시판 ${pageData.page}페이지`
+                : '사기업체 게시판',
+          )}</h1>
+          <form class="company-search-row" action="/companies" method="get" role="search">
+            <label class="visually-hidden" for="server-company-search">사기업체 검색</label>
+            <div class="company-search-field">
+              <input id="server-company-search" name="q" type="search" value="${searchValue}" placeholder="사기업체명 검색" maxlength="${COMPANY_SEARCH_MAX_LENGTH}" autocomplete="off" />
+              ${pageData.searchQuery ? '<a class="company-search-clear" href="/companies" aria-label="검색어 지우기">×</a>' : ''}
+            </div>
+          </form>
+          <div class="companies-grid">${cards}</div>
+          ${renderPagination(pageData)}
+        </div>
+      </section>
+    </main>
+  </div>`
+}
+
+const renderCompanyCaseServerContent = (companyCase) => {
+  const imageUrl = toAbsoluteUrl(companyCase.image) || DEFAULT_IMAGE_URL
+
+  return `<div class="app-shell">
+    <main>
+      <section class="companies-page" aria-label="사기업체 상세 사례">
+        <div class="section-wrap companies-grid-wrap">
+          <nav aria-label="경로"><a href="/">홈</a> &gt; <a href="/companies">사기업체 게시판</a> &gt; <span>${escapeHtml(
+            companyCase.name,
+          )}</span></nav>
+          <article class="company-detail">
+            <a class="company-detail-back" href="/companies">목록으로</a>
+            <div class="company-detail-layout">
+              <div class="company-detail-image-wrap">
+                <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(companyCase.name)} 이미지" />
+              </div>
+              <div class="company-detail-copy">
+                <p class="company-detail-service">${escapeHtml(companyCase.service)}</p>
+                <h1>${escapeHtml(companyCase.name)}</h1>
+                ${renderDescriptionParagraphs(companyCase.description)}
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>`
+}
+
+export const buildCompaniesPageHtml = (html, pageData) => {
+  const isSearchPage = Boolean(pageData.searchQuery)
+  const pagePath = isSearchPage ? COMPANIES_PAGE_PATH : getCompaniesPagePath(pageData.page)
+  const canonicalUrl = `${SITE_BASE_URL}${pagePath}`
+  const title = isSearchPage
+    ? `${pageData.searchQuery} 검색 | 사기업체 게시판 | 법무법인 나란`
+    : pageData.page > 1
+      ? `사기업체 게시판 ${pageData.page}페이지 | 법무법인 나란`
+      : COMPANIES_PAGE_TITLE
+
+  let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'description', COMPANIES_PAGE_DESCRIPTION)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'keywords', COMPANIES_PAGE_KEYWORDS)
+  nextHtml = replaceOrInsertMeta(
+    nextHtml,
+    'name',
+    'robots',
+    isSearchPage
+      ? 'noindex,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
+      : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
+  )
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:type', 'website')
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:site_name', SEARCH_RESULT_SITE_NAME)
-  nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:title', COMPANIES_PAGE_TITLE)
+  nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:title', title)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:description', COMPANIES_PAGE_DESCRIPTION)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:url', canonicalUrl)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:image', DEFAULT_IMAGE_URL)
-  nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'twitter:title', COMPANIES_PAGE_TITLE)
+  nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'twitter:title', title)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'twitter:description', COMPANIES_PAGE_DESCRIPTION)
   nextHtml = replaceOrInsertCanonical(nextHtml, canonicalUrl)
   nextHtml = replaceOrInsertRouteStructuredData(nextHtml, {
@@ -248,7 +511,7 @@ const applyCompaniesPageSeo = (html) => {
     '@graph': [
       {
         '@type': 'CollectionPage',
-        name: COMPANIES_PAGE_TITLE,
+        name: title,
         description: COMPANIES_PAGE_DESCRIPTION,
         url: canonicalUrl,
         inLanguage: 'ko-KR',
@@ -261,17 +524,32 @@ const applyCompaniesPageSeo = (html) => {
         mainEntity: {
           '@type': 'ItemList',
           name: '사기업체 사례 게시판',
-          description: '금융사기 의심 업체 및 사기 피해 사례를 모아 확인하는 게시판입니다.',
+          numberOfItems: pageData.totalCount,
+          itemListElement: pageData.items.map((item, index) => ({
+            '@type': 'ListItem',
+            position: (pageData.page - 1) * COMPANY_CASES_PER_PAGE + index + 1,
+            name: item.name,
+            url: `${SITE_BASE_URL}/companies/${encodeURIComponent(item.id)}`,
+          })),
         },
       },
       getCompaniesBreadcrumbStructuredData(canonicalUrl),
     ],
   })
+  nextHtml = replaceOrInsertBootstrapData(nextHtml, {
+    kind: 'list',
+    items: pageData.items,
+    page: pageData.page,
+    searchQuery: pageData.searchQuery,
+    totalCount: pageData.totalCount,
+    totalPages: pageData.totalPages,
+  })
+  nextHtml = replaceRootContent(nextHtml, renderCompaniesServerContent(pageData))
 
   return nextHtml
 }
 
-const applyCompanyCaseSeo = (html, companyCase) => {
+export const buildCompanyCasePageHtml = (html, companyCase) => {
   const path = `/companies/${encodeURIComponent(companyCase.id)}`
   const canonicalUrl = `${SITE_BASE_URL}${path}`
   const imageUrl = toAbsoluteUrl(companyCase.image) || DEFAULT_IMAGE_URL
@@ -328,6 +606,26 @@ const applyCompanyCaseSeo = (html, companyCase) => {
     ],
   })
 
+  nextHtml = replaceOrInsertBootstrapData(nextHtml, {
+    kind: 'detail',
+    item: companyCase,
+  })
+  nextHtml = replaceRootContent(nextHtml, renderCompanyCaseServerContent(companyCase))
+
+  return nextHtml
+}
+
+export const buildNotFoundPageHtml = (html, requestedPath) => {
+  const canonicalUrl = `${SITE_BASE_URL}${requestedPath}`
+  const title = '페이지를 찾을 수 없습니다 | 법무법인 나란'
+  const content = `<div class="app-shell"><main><section class="section-wrap companies-grid-wrap"><h1>페이지를 찾을 수 없습니다.</h1><p>삭제되었거나 존재하지 않는 사기업체 사례입니다.</p><a class="company-detail-back" href="/companies">사기업체 게시판으로 이동</a></section></main></div>`
+
+  let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+  nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'description', '요청한 페이지를 찾을 수 없습니다.')
+  nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'robots', 'noindex,follow')
+  nextHtml = replaceOrInsertCanonical(nextHtml, canonicalUrl)
+  nextHtml = replaceRootContent(nextHtml, content)
+  nextHtml = nextHtml.replace(/<script\s+[^>]*type=["']module["'][^>]*><\/script>/i, '')
   return nextHtml
 }
 
@@ -335,7 +633,11 @@ const getRequestCompanyCaseId = (req) => {
   const queryId = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id
 
   if (queryId) {
-    return toTrimmedString(queryId)
+    try {
+      return decodeURIComponent(toTrimmedString(queryId))
+    } catch {
+      return toTrimmedString(queryId)
+    }
   }
 
   try {
@@ -344,6 +646,47 @@ const getRequestCompanyCaseId = (req) => {
   } catch {
     return ''
   }
+}
+
+const getRequestQueryValue = (req, key) => {
+  const queryValue = Array.isArray(req.query?.[key]) ? req.query[key][0] : req.query?.[key]
+
+  if (queryValue !== undefined && queryValue !== null) {
+    return toTrimmedString(queryValue)
+  }
+
+  try {
+    const url = new URL(req.url, SITE_BASE_URL)
+    return toTrimmedString(url.searchParams.get(key))
+  } catch {
+    return ''
+  }
+}
+
+const getRequestPage = (req) => {
+  const rawPage = getRequestQueryValue(req, 'page')
+
+  if (!rawPage) {
+    return { page: 1, valid: true }
+  }
+
+  if (!/^\d+$/.test(rawPage)) {
+    return { page: 1, valid: false }
+  }
+
+  const page = Number.parseInt(rawPage, 10)
+  return { page, valid: Number.isSafeInteger(page) && page >= 1 }
+}
+
+const sendHtml = (req, res, status, html, cacheControl) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.setHeader('Cache-Control', cacheControl)
+
+  if (req.method === 'HEAD') {
+    return res.status(status).end()
+  }
+
+  return res.status(status).send(html)
 }
 
 export default async function handler(req, res) {
@@ -355,28 +698,54 @@ export default async function handler(req, res) {
   try {
     const id = getRequestCompanyCaseId(req)
     const indexHtml = await getIndexHtml()
-    let companyCase = null
 
     if (id) {
-      try {
-        companyCase = await getCompanyCase(id)
-      } catch (error) {
-        console.error('[api/company-page] Firestore read failed', error)
+      const companyCase = await getCompanyCase(id)
+
+      if (!companyCase) {
+        const requestedPath = `/companies/${encodeURIComponent(id)}`
+        return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, requestedPath), 'no-store')
       }
+
+      return sendHtml(
+        req,
+        res,
+        200,
+        buildCompanyCasePageHtml(indexHtml, companyCase),
+        'public, s-maxage=300, stale-while-revalidate=3600',
+      )
     }
 
-    const html = companyCase ? applyCompanyCaseSeo(indexHtml, companyCase) : applyCompaniesPageSeo(indexHtml)
+    const requestedPage = getRequestPage(req)
+    const searchQuery = getRequestQueryValue(req, 'q').slice(0, COMPANY_SEARCH_MAX_LENGTH)
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.setHeader('Cache-Control', companyCase ? 'public, s-maxage=300, stale-while-revalidate=3600' : 'public, s-maxage=60')
-
-    if (req.method === 'HEAD') {
-      return res.status(200).end()
+    if (!requestedPage.valid) {
+      return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, COMPANIES_PAGE_PATH), 'no-store')
     }
 
-    return res.status(200).send(html)
+    const pageData = await getCompaniesPage({ page: requestedPage.page, searchQuery })
+
+    if (pageData.totalCount > 0 && pageData.page > pageData.totalPages) {
+      return sendHtml(
+        req,
+        res,
+        404,
+        buildNotFoundPageHtml(indexHtml, getCompaniesPagePath(pageData.page, searchQuery)),
+        'no-store',
+      )
+    }
+
+    return sendHtml(
+      req,
+      res,
+      200,
+      buildCompaniesPageHtml(indexHtml, pageData),
+      searchQuery ? 'private, no-store' : 'public, s-maxage=300, stale-while-revalidate=3600',
+    )
   } catch (error) {
     console.error('[api/company-page] error', error)
-    return res.status(500).send('Internal Server Error')
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Retry-After', '60')
+    return res.status(503).send('Service Unavailable')
   }
 }
