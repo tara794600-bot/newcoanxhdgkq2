@@ -2159,6 +2159,9 @@ main {
 
 .company-search-clear {
   position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   top: 50%;
   right: 10px;
   width: 34px;
@@ -2172,6 +2175,7 @@ main {
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .company-search-clear:hover,
@@ -2204,6 +2208,9 @@ main {
 }
 
 .company-page-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 38px;
   height: 38px;
   border: 1px solid #cdd8e5;
@@ -2215,6 +2222,7 @@ main {
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
+  text-decoration: none;
   transition:
     background 0.18s ease,
     border-color 0.18s ease,
@@ -2222,7 +2230,7 @@ main {
     transform 0.18s ease;
 }
 
-.company-page-button:hover:not(:disabled),
+.company-page-button:hover:not(:disabled):not(.is-disabled),
 .company-page-button:focus-visible {
   border-color: var(--brand);
   color: #1f4f76;
@@ -2239,6 +2247,12 @@ main {
 .company-page-button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.company-page-button.is-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
 }
 
 .company-page-arrow {
@@ -2320,6 +2334,10 @@ main {
 }
 
 .company-detail-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
   border: 1px solid #cdd8e5;
   border-radius: 999px;
   background: #ffffff;
@@ -2330,6 +2348,7 @@ main {
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .company-detail-back:hover,
@@ -2388,6 +2407,7 @@ main {
   line-height: 1;
 }
 
+.company-detail-copy h1,
 .company-detail-copy h3 {
   margin: 18px 0 0;
   color: #1f2734;
@@ -3536,6 +3556,7 @@ main {
     aspect-ratio: 122 / 73;
   }
 
+  .company-detail-copy h1,
   .company-detail-copy h3 {
     margin-top: 14px;
     font-size: clamp(24px, 6.4vw, 32px);
@@ -4005,6 +4026,7 @@ main {
     font-size: 12px;
   }
 
+  .company-detail-copy h1,
   .company-detail-copy h3 {
     font-size: clamp(21px, 6vw, 27px);
   }

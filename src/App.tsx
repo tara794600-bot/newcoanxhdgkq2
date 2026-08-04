@@ -49,6 +49,7 @@ declare global {
   interface Window {
     dataLayer?: unknown[]
     gtag?: GoogleTag
+    __COMPANY_PAGE_DATA__?: CompanyPageBootstrap
   }
 }
 
@@ -80,6 +81,20 @@ type CompanyCase = {
   description: string
   image: string
 }
+
+type CompanyPageBootstrap =
+  | {
+      kind: 'detail'
+      item: CompanyCase
+    }
+  | {
+      kind: 'list'
+      items: CompanyCase[]
+      page: number
+      searchQuery: string
+      totalCount: number
+      totalPages: number
+    }
 
 type PowerlinkLink = {
   id: string
@@ -121,6 +136,7 @@ const CONTACT_PHONE_TEL = `tel:${CONTACT_PHONE_NUMBER.replace(/[^0-9+]/g, '')}`
 const GOOGLE_ADS_ID = 'AW-16949684264'
 const GOOGLE_ADS_CONVERSION_SEND_TO = 'AW-16949684264/I91fCL6M-qMcEKjQnpI_'
 const GOOGLE_ADS_SCRIPT_ID = 'google-ads-gtag-script'
+const COMPANY_SEARCH_MAX_LENGTH = 120
 const HERO_TYPING_TEXT = '수많은 사기 피해 대응 경험,\n그 차이를 증명합니다.'
 const COMPANIES_BANNER_TYPING_TEXT_DESKTOP =
   '경찰신고만으로는 피해금을 되찾을 수 없습니다.\n지금 바로 대응해 피해금 회복이 가능합니다.'
@@ -371,12 +387,29 @@ const getSeoMeta = (
   route: PageRoute,
   powerlinkKeyword: string,
   selectedCompanyCase: CompanyCase | null,
+  companyPage: number,
+  companySearchQuery: string,
 ): SeoMeta => {
   const routeMeta = SEO_META_BY_ROUTE[route]
   const keyword = powerlinkKeyword.trim()
 
   if (route === 'companies' && selectedCompanyCase) {
     return getCompanyCaseSeoMeta(selectedCompanyCase)
+  }
+
+  if (route === 'companies' && companySearchQuery) {
+    return {
+      ...routeMeta,
+      title: `${companySearchQuery} 검색 | 사기업체 게시판 | 법무법인 나란`,
+    }
+  }
+
+  if (route === 'companies' && companyPage > 1) {
+    return {
+      ...routeMeta,
+      title: `사기업체 게시판 ${companyPage}페이지 | 법무법인 나란`,
+      path: getCompaniesPagePath(companyPage),
+    }
   }
 
   if (route !== 'home' || !keyword) {
@@ -473,6 +506,9 @@ const getRouteStructuredData = (
   seoMeta: SeoMeta,
   canonicalUrl: string,
   selectedCompanyCase: CompanyCase | null,
+  companyCases: CompanyCase[],
+  companyPage: number,
+  companyTotalCount: number,
 ) => {
   if (route !== 'companies') {
     return null
@@ -533,6 +569,13 @@ const getRouteStructuredData = (
           '@type': 'ItemList',
           name: '사기업체 사례 게시판',
           description: '금융사기 의심 업체 및 사기 피해 사례를 모아 확인하는 게시판입니다.',
+          numberOfItems: companyTotalCount,
+          itemListElement: companyCases.map((item, index) => ({
+            '@type': 'ListItem',
+            position: (companyPage - 1) * COMPANY_CASES_PER_PAGE + index + 1,
+            name: item.name,
+            url: toAbsoluteSiteUrl(getCompanyCasePath(item.id)),
+          })),
         },
       },
       getCompaniesBreadcrumbStructuredData(canonicalUrl, selectedCompanyCase),
@@ -592,6 +635,79 @@ const getCompanyCaseIdFromPath = (pathname: string): string => {
 }
 
 const getCompanyCasePath = (id: string): string => `${ROUTE_PATHS.companies}/${encodeURIComponent(id)}`
+
+const getCompaniesPagePath = (page: number, searchQuery = ''): string => {
+  const params = new URLSearchParams()
+
+  if (page > 1) {
+    params.set('page', String(page))
+  }
+
+  const normalizedSearchQuery = searchQuery.trim().slice(0, COMPANY_SEARCH_MAX_LENGTH)
+
+  if (normalizedSearchQuery) {
+    params.set('q', normalizedSearchQuery)
+  }
+
+  const queryString = params.toString()
+  return queryString ? `${ROUTE_PATHS.companies}?${queryString}` : ROUTE_PATHS.companies
+}
+
+const getRequestedCompanyPage = (): number => {
+  const rawPage = new URLSearchParams(window.location.search).get('page')
+
+  if (!rawPage || !/^\d+$/.test(rawPage)) {
+    return 1
+  }
+
+  const page = Number.parseInt(rawPage, 10)
+  return Number.isSafeInteger(page) && page >= 1 ? page : 1
+}
+
+const getRequestedCompanySearchQuery = (): string =>
+  (new URLSearchParams(window.location.search).get('q') ?? '').trim().slice(0, COMPANY_SEARCH_MAX_LENGTH)
+
+const isCompanyCase = (value: unknown): value is CompanyCase => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const item = value as Partial<CompanyCase>
+  return [item.id, item.name, item.service, item.description, item.image].every(
+    (field) => typeof field === 'string' && field.trim().length > 0,
+  )
+}
+
+const getInitialCompanyPageData = (): CompanyPageBootstrap | null => {
+  const data = window.__COMPANY_PAGE_DATA__
+
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+
+  if (data.kind === 'detail') {
+    return isCompanyCase(data.item) ? data : null
+  }
+
+  if (
+    data.kind === 'list' &&
+    Array.isArray(data.items) &&
+    data.items.every(isCompanyCase) &&
+    typeof data.searchQuery === 'string' &&
+    Number.isSafeInteger(data.page) &&
+    data.page >= 1 &&
+    Number.isSafeInteger(data.totalCount) &&
+    data.totalCount >= 0 &&
+    Number.isSafeInteger(data.totalPages) &&
+    data.totalPages >= 1
+  ) {
+    return data
+  }
+
+  return null
+}
+
+const INITIAL_COMPANY_PAGE_DATA = getInitialCompanyPageData()
 
 const resolveLegacyHashRoute = (hash: string): PageRoute | null => {
   const rawHash = hash.trim()
@@ -1233,7 +1349,6 @@ function App() {
   const heroStatsBarRef = useRef<HTMLDivElement | null>(null)
   const companyDetailImageRef = useRef<HTMLDivElement | null>(null)
   const companyDetailCopyRef = useRef<HTMLDivElement | null>(null)
-  const companyListTopRef = useRef<HTMLDivElement | null>(null)
   const companyDetailStackedRef = useRef(false)
   const shouldScrollToQuickFormRef = useRef(false)
   const adminEnrollmentInProgressRef = useRef(false)
@@ -1253,8 +1368,20 @@ function App() {
   const [isStaffCheckPending, setIsStaffCheckPending] = useState(isFirebaseConfigured)
 
   const [rollingCases, setRollingCases] = useState<RollingCase[]>([])
-  const [companyCases, setCompanyCases] = useState<CompanyCase[]>([])
-  const [companyCasesLoaded, setCompanyCasesLoaded] = useState(!isFirebaseConfigured)
+  const [companyCases, setCompanyCases] = useState<CompanyCase[]>(() => {
+    if (INITIAL_COMPANY_PAGE_DATA?.kind === 'detail') {
+      return [INITIAL_COMPANY_PAGE_DATA.item]
+    }
+
+    if (INITIAL_COMPANY_PAGE_DATA?.kind === 'list') {
+      return INITIAL_COMPANY_PAGE_DATA.items
+    }
+
+    return []
+  })
+  const [companyCasesLoaded, setCompanyCasesLoaded] = useState(
+    !isFirebaseConfigured || Boolean(INITIAL_COMPANY_PAGE_DATA),
+  )
   const [powerlinkLinks, setPowerlinkLinks] = useState<PowerlinkLink[]>([])
 
   const [adminOpen, setAdminOpen] = useState(false)
@@ -1273,8 +1400,24 @@ function App() {
   const [companyImageFile, setCompanyImageFile] = useState<File | null>(null)
   const [companyUploadBusy, setCompanyUploadBusy] = useState(false)
   const [companyEditingCaseId, setCompanyEditingCaseId] = useState('')
-  const [companySearchInput, setCompanySearchInput] = useState('')
-  const [companyCurrentPage, setCompanyCurrentPage] = useState(1)
+  const [companySearchInput, setCompanySearchInput] = useState(() =>
+    INITIAL_COMPANY_PAGE_DATA?.kind === 'list'
+      ? INITIAL_COMPANY_PAGE_DATA.searchQuery
+      : getRequestedCompanySearchQuery(),
+  )
+  const [companyCurrentPage] = useState(() =>
+    INITIAL_COMPANY_PAGE_DATA?.kind === 'list' ? INITIAL_COMPANY_PAGE_DATA.page : getRequestedCompanyPage(),
+  )
+  const [companyTotalPages] = useState(() =>
+    INITIAL_COMPANY_PAGE_DATA?.kind === 'list' ? INITIAL_COMPANY_PAGE_DATA.totalPages : 1,
+  )
+  const [companyTotalCount] = useState(() =>
+    INITIAL_COMPANY_PAGE_DATA?.kind === 'list'
+      ? INITIAL_COMPANY_PAGE_DATA.totalCount
+      : INITIAL_COMPANY_PAGE_DATA?.kind === 'detail'
+        ? 1
+        : 0,
+  )
   const [adminCompanySearchInput, setAdminCompanySearchInput] = useState('')
   const [adminRollingCurrentPage, setAdminRollingCurrentPage] = useState(1)
   const [adminCompanyCurrentPage, setAdminCompanyCurrentPage] = useState(1)
@@ -1326,29 +1469,19 @@ function App() {
     : COMPANIES_BANNER_TYPING_TEXT_DESKTOP
   const showCompaniesTypingCursor =
     route === 'companies' && companiesBannerTypedText.length < companiesBannerTypingText.length
-  const normalizedCompanySearchTerm = companySearchInput.trim().toLocaleLowerCase('ko-KR')
-  const filteredCompanyCases = useMemo(() => {
-    if (!normalizedCompanySearchTerm) {
-      return companyCases
-    }
-
-    return companyCases.filter((item) =>
-      [item.name, item.service, item.description].some((value) =>
-        value.toLocaleLowerCase('ko-KR').includes(normalizedCompanySearchTerm),
-      ),
-    )
-  }, [companyCases, normalizedCompanySearchTerm])
-  const companyPageCount = Math.max(1, Math.ceil(filteredCompanyCases.length / COMPANY_CASES_PER_PAGE))
+  const appliedCompanySearchTerm =
+    INITIAL_COMPANY_PAGE_DATA?.kind === 'list'
+      ? INITIAL_COMPANY_PAGE_DATA.searchQuery
+      : getRequestedCompanySearchQuery()
+  const filteredCompanyCases = companyCases
+  const companyPageCount = Math.max(1, companyTotalPages)
   const activeCompanyPage = Math.min(companyCurrentPage, companyPageCount)
-  const paginatedCompanyCases = useMemo(() => {
-    const startIndex = (activeCompanyPage - 1) * COMPANY_CASES_PER_PAGE
-    return filteredCompanyCases.slice(startIndex, startIndex + COMPANY_CASES_PER_PAGE)
-  }, [activeCompanyPage, filteredCompanyCases])
+  const paginatedCompanyCases = filteredCompanyCases
   const companyPaginationItems = useMemo(
     () => getPaginationItems(companyPageCount, activeCompanyPage),
     [activeCompanyPage, companyPageCount],
   )
-  const shouldShowCompanyPagination = filteredCompanyCases.length > COMPANY_CASES_PER_PAGE
+  const shouldShowCompanyPagination = companyPageCount > 1
   const normalizedAdminCompanySearchTerm = adminCompanySearchInput.trim().toLocaleLowerCase('ko-KR')
   const filteredAdminCompanyCases = useMemo(() => {
     if (!normalizedAdminCompanySearchTerm) {
@@ -1414,16 +1547,6 @@ function App() {
   )
 
   useEffect(() => {
-    setCompanyCurrentPage(1)
-  }, [normalizedCompanySearchTerm])
-
-  useEffect(() => {
-    if (companyCurrentPage > companyPageCount) {
-      setCompanyCurrentPage(companyPageCount)
-    }
-  }, [companyCurrentPage, companyPageCount])
-
-  useEffect(() => {
     setAdminCompanyCurrentPage(1)
   }, [normalizedAdminCompanySearchTerm])
 
@@ -1446,7 +1569,13 @@ function App() {
   }, [adminPowerlinkCurrentPage, adminPowerlinkPageCount])
 
   useEffect(() => {
-    const seoMeta = getSeoMeta(route, landingPowerlinkKeyword, selectedCompanyCase)
+    const seoMeta = getSeoMeta(
+      route,
+      landingPowerlinkKeyword,
+      selectedCompanyCase,
+      activeCompanyPage,
+      appliedCompanySearchTerm,
+    )
     const canonicalUrl = toAbsoluteSiteUrl(seoMeta.path)
     const seoImageUrl = toAbsoluteSiteUrl(seoMeta.image || '/logo.png')
     const isCompanyCaseDetail = route === 'companies' && Boolean(selectedCompanyCase)
@@ -1457,7 +1586,11 @@ function App() {
     upsertMetaTag(
       'name',
       'robots',
-      route === 'admin' ? 'noindex,nofollow' : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
+      route === 'admin'
+        ? 'noindex,nofollow'
+        : route === 'companies' && appliedCompanySearchTerm
+          ? 'noindex,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
+          : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
     )
     upsertMetaTag('property', 'og:type', isCompanyCaseDetail ? 'article' : 'website')
     upsertMetaTag('property', 'og:site_name', SEARCH_RESULT_SITE_NAME)
@@ -1469,8 +1602,26 @@ function App() {
     upsertMetaTag('name', 'twitter:description', seoMeta.description)
     upsertMetaTag('name', 'twitter:image', seoImageUrl)
     upsertCanonicalLink(canonicalUrl)
-    upsertRouteStructuredData(getRouteStructuredData(route, seoMeta, canonicalUrl, selectedCompanyCase))
-  }, [route, landingPowerlinkKeyword, selectedCompanyCase])
+    upsertRouteStructuredData(
+      getRouteStructuredData(
+        route,
+        seoMeta,
+        canonicalUrl,
+        selectedCompanyCase,
+        companyCases,
+        activeCompanyPage,
+        companyTotalCount,
+      ),
+    )
+  }, [
+    activeCompanyPage,
+    appliedCompanySearchTerm,
+    companyCases,
+    companyTotalCount,
+    landingPowerlinkKeyword,
+    route,
+    selectedCompanyCase,
+  ])
 
   useEffect(() => {
     if (route === 'admin') {
@@ -2049,6 +2200,66 @@ function App() {
       return
     }
 
+    if (route === 'companies' && selectedCompanyCaseId) {
+      if (
+        INITIAL_COMPANY_PAGE_DATA?.kind === 'detail' &&
+        INITIAL_COMPANY_PAGE_DATA.item.id === selectedCompanyCaseId
+      ) {
+        setCompanyCasesLoaded(true)
+        return
+      }
+
+      let active = true
+      setCompanyCasesLoaded(false)
+
+      void getDoc(doc(db, 'companyCases', selectedCompanyCaseId))
+        .then((snapshot) => {
+          if (!active) {
+            return
+          }
+
+          if (!snapshot.exists()) {
+            setCompanyCases([])
+            setCompanyCasesLoaded(true)
+            return
+          }
+
+          const data = snapshot.data()
+          const name = toTrimmedString(data.name)
+          const service = toTrimmedString(data.service)
+          const description = toTrimmedString(data.description)
+          const image = toTrimmedString(data.image) || toTrimmedString(data.imageUrl) || logoImg
+
+          setCompanyCases(
+            name && service && description
+              ? [{ id: snapshot.id, name, service, description, image }]
+              : [],
+          )
+          setCompanyCasesLoaded(true)
+        })
+        .catch((error) => {
+          if (active) {
+            console.error(error)
+            setCompanyCases([])
+            setCompanyCasesLoaded(true)
+          }
+        })
+
+      return () => {
+        active = false
+      }
+    }
+
+    const shouldSubscribeToAllCompanyCases =
+      route === 'admin' ||
+      (route === 'home' && Boolean(landingPowerlinkKeyword)) ||
+      (route === 'companies' && INITIAL_COMPANY_PAGE_DATA?.kind !== 'list')
+
+    if (!shouldSubscribeToAllCompanyCases) {
+      setCompanyCasesLoaded(true)
+      return
+    }
+
     setCompanyCasesLoaded(false)
     const companyCasesQuery = query(collection(db, 'companyCases'), orderBy('createdAt', 'desc'))
 
@@ -2090,7 +2301,7 @@ function App() {
     return () => {
       unsubscribe()
     }
-  }, [])
+  }, [landingPowerlinkKeyword, route, selectedCompanyCaseId])
 
   const clearAdminFeedback = () => {
     setAdminNotice('')
@@ -2297,19 +2508,6 @@ function App() {
     window.scrollTo({ top: 0 })
   }
 
-  const navigateToCompanyCase = (id: string) => {
-    const nextPath = getCompanyCasePath(id)
-    const currentPath = normalizePathname(window.location.pathname)
-
-    if (currentPath !== normalizePathname(nextPath)) {
-      window.history.pushState({}, '', nextPath)
-    }
-
-    setRoute('companies')
-    setSelectedCompanyCaseId(id)
-    window.scrollTo({ top: 0 })
-  }
-
   const isPrimaryNavigationClick = (event: MouseEvent<HTMLAnchorElement>): boolean =>
     !(event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
 
@@ -2318,33 +2516,12 @@ function App() {
       return
     }
 
+    if (nextRoute === 'companies') {
+      return
+    }
+
     event.preventDefault()
     navigateToRoute(nextRoute)
-  }
-
-  const handleCompanyCaseNavigation = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
-    if (!isPrimaryNavigationClick(event)) {
-      return
-    }
-
-    event.preventDefault()
-    navigateToCompanyCase(id)
-  }
-
-  const handleCompanyPageChange = (nextPage: number) => {
-    const boundedPage = Math.min(Math.max(nextPage, 1), companyPageCount)
-
-    if (boundedPage === activeCompanyPage) {
-      return
-    }
-
-    setCompanyCurrentPage(boundedPage)
-    window.requestAnimationFrame(() => {
-      companyListTopRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    })
   }
 
   const handleAdminRollingPageChange = (nextPage: number) => {
@@ -2989,6 +3166,7 @@ function App() {
         description,
         image,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         createdBy: currentUser.uid,
       })
 
@@ -3909,14 +4087,14 @@ function App() {
               </div>
             </div>
 
-            <div className="section-wrap companies-grid-wrap" ref={companyListTopRef}>
+            <div className="section-wrap companies-grid-wrap">
               {selectedCompanyCaseId ? (
                 selectedCompanyCase ? (
                   <>
                     <article className="company-detail">
-                      <button type="button" className="company-detail-back" onClick={() => navigateToRoute('companies')}>
+                      <a className="company-detail-back" href={ROUTE_PATHS.companies}>
                         목록으로
-                      </button>
+                      </a>
                       <div
                         className={`company-detail-layout ${
                           companyDetailStacked ? 'company-detail-layout-stacked' : ''
@@ -3927,7 +4105,7 @@ function App() {
                         </div>
                         <div className="company-detail-copy" ref={companyDetailCopyRef}>
                           <p className="company-detail-service">{selectedCompanyCase.service}</p>
-                          <h3>{selectedCompanyCase.name}</h3>
+                          <h1>{selectedCompanyCase.name}</h1>
                           <p className="company-detail-description">{selectedCompanyCase.description}</p>
                           <button type="button" className="company-detail-cta" onClick={moveToQuickFormSection}>
                             신청 바로가기
@@ -3951,9 +4129,9 @@ function App() {
                 ) : companyCasesLoaded ? (
                   <div className="company-detail company-detail-empty">
                     <p>게시물을 찾을 수 없습니다.</p>
-                    <button type="button" className="company-detail-back" onClick={() => navigateToRoute('companies')}>
+                    <a className="company-detail-back" href={ROUTE_PATHS.companies}>
                       목록으로
-                    </button>
+                    </a>
                   </div>
                 ) : (
                   <div className="company-detail company-detail-empty">
@@ -3962,42 +4140,38 @@ function App() {
                 )
               ) : (
                 <>
-                  <div className="company-search-row">
+                  <form className="company-search-row" action={ROUTE_PATHS.companies} method="get" role="search">
                     <label className="visually-hidden" htmlFor="company-search">
                       사기업체 검색
                     </label>
                     <div className="company-search-field">
                       <input
                         id="company-search"
+                        name="q"
                         type="search"
                         value={companySearchInput}
                         onChange={(event) => setCompanySearchInput(event.target.value)}
                         placeholder="사기업체명 검색"
+                        maxLength={COMPANY_SEARCH_MAX_LENGTH}
                         autoComplete="off"
                       />
                       {companySearchInput ? (
-                        <button
-                          type="button"
-                          className="company-search-clear"
-                          onClick={() => setCompanySearchInput('')}
-                          aria-label="검색어 지우기"
-                        >
+                        <a className="company-search-clear" href={ROUTE_PATHS.companies} aria-label="검색어 지우기">
                           ×
-                        </button>
+                        </a>
                       ) : null}
                     </div>
-                  </div>
+                  </form>
 
-                  {companyCases.length > 0 && filteredCompanyCases.length === 0 ? (
+                  {companyCasesLoaded && filteredCompanyCases.length === 0 ? (
                     <p className="companies-empty">검색 결과가 없습니다.</p>
                   ) : (
                     <div className="companies-grid">
-                      {companyCases.length > 0
+                      {companyCasesLoaded
                         ? paginatedCompanyCases.map((item) => (
                             <a
                               className="company-card company-card-filled company-card-link"
                               href={getCompanyCasePath(item.id)}
-                              onClick={(event) => handleCompanyCaseNavigation(event, item.id)}
                               key={item.id}
                             >
                               <div className="company-card-thumb-wrap">
@@ -4017,27 +4191,30 @@ function App() {
 
                   {shouldShowCompanyPagination ? (
                     <nav className="company-pagination" aria-label="사기업체 게시물 페이지">
-                      <button
-                        type="button"
-                        className="company-page-button company-page-arrow"
-                        onClick={() => handleCompanyPageChange(activeCompanyPage - 1)}
-                        disabled={activeCompanyPage <= 1}
-                        aria-label="이전 페이지"
-                      >
-                        &lt;
-                      </button>
+                      {activeCompanyPage > 1 ? (
+                        <a
+                          className="company-page-button company-page-arrow"
+                          href={getCompaniesPagePath(activeCompanyPage - 1, appliedCompanySearchTerm)}
+                          aria-label="이전 페이지"
+                        >
+                          &lt;
+                        </a>
+                      ) : (
+                        <span className="company-page-button company-page-arrow is-disabled" aria-hidden="true">
+                          &lt;
+                        </span>
+                      )}
 
                       {companyPaginationItems.map((item) =>
                         typeof item === 'number' ? (
-                          <button
-                            type="button"
+                          <a
                             className={`company-page-button${item === activeCompanyPage ? ' is-active' : ''}`}
-                            onClick={() => handleCompanyPageChange(item)}
+                            href={getCompaniesPagePath(item, appliedCompanySearchTerm)}
                             aria-current={item === activeCompanyPage ? 'page' : undefined}
                             key={`company-page-${item}`}
                           >
                             {item}
-                          </button>
+                          </a>
                         ) : (
                           <span className="company-page-ellipsis" aria-hidden="true" key={`company-page-${item}`}>
                             ...
@@ -4045,15 +4222,19 @@ function App() {
                         ),
                       )}
 
-                      <button
-                        type="button"
-                        className="company-page-button company-page-arrow"
-                        onClick={() => handleCompanyPageChange(activeCompanyPage + 1)}
-                        disabled={activeCompanyPage >= companyPageCount}
-                        aria-label="다음 페이지"
-                      >
-                        &gt;
-                      </button>
+                      {activeCompanyPage < companyPageCount ? (
+                        <a
+                          className="company-page-button company-page-arrow"
+                          href={getCompaniesPagePath(activeCompanyPage + 1, appliedCompanySearchTerm)}
+                          aria-label="다음 페이지"
+                        >
+                          &gt;
+                        </a>
+                      ) : (
+                        <span className="company-page-button company-page-arrow is-disabled" aria-hidden="true">
+                          &gt;
+                        </span>
+                      )}
                     </nav>
                   ) : null}
                 </>
