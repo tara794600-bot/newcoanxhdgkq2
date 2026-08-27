@@ -3945,7 +3945,7 @@ function App() {
                   </div>
                 ) : (
                   <div className="company-detail company-detail-empty">
-                    <p>게시물을 불러오는 중입니다.</p>
+                      <p>삭제되었으나 해당 내용으로 피해 보신 분들은 즉시 1551-7203으로 연락 바랍니다.</p>
                   </div>
                 )
               ) : (
