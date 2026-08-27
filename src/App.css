@@ -70,7 +70,14 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-
+.company-detail-empty .company-detail-deleted-message,
+.company-detail-deleted-message {
+  color: #26384a;
+  font-size: clamp(24px, 2.6vw, 34px);
+  font-weight: 800;
+  line-height: 1.5;
+  word-break: keep-all;
+}
 @supports (-webkit-touch-callout: none) {
   .app-shell::before {
     height: calc(var(--safe-area-top) + 32px);
