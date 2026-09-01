@@ -80,6 +80,7 @@ type CompanyCase = {
   service: string
   description: string
   image: string
+  isPublic?: boolean
 }
 
 type CompanyPageBootstrap =
@@ -127,7 +128,6 @@ const ADMIN_INVITE_CODE = (
   import.meta.env.VITE_STAFF_INVITE_CODE ??
   ''
 ).trim()
-
 const CONSULTATION_API_URL = (import.meta.env.VITE_CONSULTATION_API_URL ?? '').trim()
 const POWERLINK_GENERATE_API_URL = (import.meta.env.VITE_POWERLINK_GENERATE_API_URL ?? '').trim()
 const KAKAO_OPEN_CHAT_URL = 'http://pf.kakao.com/_txdqSn/chat'
@@ -595,11 +595,6 @@ const normalizePathname = (pathname: string): string => {
   return withoutTrailingSlash || '/'
 }
 
-const isAdminRoutePathname = (pathname: string): boolean => {
-  const cleaned = normalizePathname(pathname).toLowerCase()
-  return cleaned === ROUTE_PATHS.admin || cleaned.startsWith(`${ROUTE_PATHS.admin}/`)
-}
-
 const resolveRoute = (pathname: string): PageRoute => {
   const cleaned = normalizePathname(pathname).toLowerCase()
 
@@ -611,7 +606,7 @@ const resolveRoute = (pathname: string): PageRoute => {
     return 'companies'
   }
 
-  if (isAdminRoutePathname(cleaned)) {
+  if (cleaned === '/admin' || cleaned.startsWith('/admin/')) {
     return 'admin'
   }
 
@@ -673,8 +668,11 @@ const isCompanyCase = (value: unknown): value is CompanyCase => {
   }
 
   const item = value as Partial<CompanyCase>
-  return [item.id, item.name, item.service, item.description, item.image].every(
-    (field) => typeof field === 'string' && field.trim().length > 0,
+  return (
+    [item.id, item.name, item.service, item.description, item.image].every(
+      (field) => typeof field === 'string' && field.trim().length > 0,
+    ) &&
+    (item.isPublic === undefined || typeof item.isPublic === 'boolean')
   )
 }
 
@@ -777,7 +775,10 @@ const detectVisitSource = (params: {
 
 let googleAdsTagConfigured = false
 
-const isGoogleAdsTrackingAllowed = (): boolean => !isAdminRoutePathname(window.location.pathname)
+const isGoogleAdsTrackingAllowed = (): boolean => {
+  const pathname = normalizePathname(window.location.pathname).toLowerCase()
+  return pathname !== '/admin' && !pathname.startsWith('/admin/')
+}
 
 const removeGoogleAdsTag = () => {
   document.getElementById(GOOGLE_ADS_SCRIPT_ID)?.remove()
@@ -1164,6 +1165,17 @@ const companyCaseMatchesKeyword = (item: CompanyCase, keyword: string): boolean 
   })
 }
 
+const shuffleCompanyCases = (items: CompanyCase[]): CompanyCase[] => {
+  const shuffledItems = [...items]
+
+  for (let index = shuffledItems.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    ;[shuffledItems[index], shuffledItems[randomIndex]] = [shuffledItems[randomIndex], shuffledItems[index]]
+  }
+
+  return shuffledItems
+}
+
 const ROLLING_CASE_LIMITS = {
   category: 40,
   title: 120,
@@ -1185,7 +1197,6 @@ const CONSULTATION_NAME_REGEX = /^[가-힣]{2,6}$/
 const CONSULTATION_PHONE_REGEX = /^\d{11}$/
 
 const POWERLINK_KEYWORD_LIMIT = 120
-
 const MAX_IMAGE_UPLOAD_SIZE_MB = 10
 const MAX_IMAGE_UPLOAD_SIZE_BYTES = MAX_IMAGE_UPLOAD_SIZE_MB * 1024 * 1024
 
@@ -1197,8 +1208,7 @@ const getFileExtension = (file: File): string => {
     return extensionFromName
   }
 
-  const extensionFromType = file.type.split('/')[1]?.toLowerCase() ?? ''
-  return extensionFromType || 'jpg'
+  return file.type.split('/')[1]?.toLowerCase() || 'jpg'
 }
 
 const validateImageFile = (file: File) => {
@@ -1221,13 +1231,9 @@ const uploadCaseImage = async (params: {
 
   const fileExtension = getFileExtension(file)
   const uniqueKey = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  const filePath = `${bucketFolder}/${user.uid}/${uniqueKey}.${fileExtension}`
-  const uploadedFileRef = storageRef(storage, filePath)
+  const uploadedFileRef = storageRef(storage, `${bucketFolder}/${user.uid}/${uniqueKey}.${fileExtension}`)
 
-  await uploadBytes(uploadedFileRef, file, {
-    contentType: file.type || undefined,
-  })
-
+  await uploadBytes(uploadedFileRef, file, { contentType: file.type || undefined })
   return getDownloadURL(uploadedFileRef)
 }
 
@@ -1251,21 +1257,15 @@ const toUploadErrorMessage = (error: unknown, fallbackMessage: string) => {
     if (error.code === 'storage/unauthorized') {
       return '스토리지 업로드 권한이 없습니다. Firebase Storage Rules를 확인해주세요.'
     }
-
     if (error.code === 'storage/quota-exceeded') {
       return '스토리지 용량 한도를 초과했습니다. Firebase 요금제/용량을 확인해주세요.'
     }
-
     if (error.code === 'storage/canceled') {
       return '이미지 업로드가 취소되었습니다.'
     }
   }
 
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  return fallbackMessage
+  return error instanceof Error && error.message ? error.message : fallbackMessage
 }
 
 const toAuthErrorMessage = (error: unknown): string => {
@@ -1383,23 +1383,28 @@ function App() {
     !isFirebaseConfigured || Boolean(INITIAL_COMPANY_PAGE_DATA),
   )
   const [powerlinkLinks, setPowerlinkLinks] = useState<PowerlinkLink[]>([])
-
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminNotice, setAdminNotice] = useState('')
   const [adminError, setAdminError] = useState('')
-
   const [rollingCategoryInput, setRollingCategoryInput] = useState('')
   const [rollingTitleInput, setRollingTitleInput] = useState('')
   const [rollingResultInput, setRollingResultInput] = useState('')
   const [rollingImageFile, setRollingImageFile] = useState<File | null>(null)
   const [rollingUploadBusy, setRollingUploadBusy] = useState(false)
-
   const [companyNameInput, setCompanyNameInput] = useState('')
   const [companyServiceInput, setCompanyServiceInput] = useState('')
   const [companyDescriptionInput, setCompanyDescriptionInput] = useState('')
   const [companyImageFile, setCompanyImageFile] = useState<File | null>(null)
+  const [companyIsPublicInput, setCompanyIsPublicInput] = useState(true)
   const [companyUploadBusy, setCompanyUploadBusy] = useState(false)
+  const [companyVisibilityBusyId, setCompanyVisibilityBusyId] = useState('')
   const [companyEditingCaseId, setCompanyEditingCaseId] = useState('')
+  const [adminCompanySearchInput, setAdminCompanySearchInput] = useState('')
+  const [adminRollingCurrentPage, setAdminRollingCurrentPage] = useState(1)
+  const [adminCompanyCurrentPage, setAdminCompanyCurrentPage] = useState(1)
+  const [adminPowerlinkCurrentPage, setAdminPowerlinkCurrentPage] = useState(1)
+  const [powerlinkKeywordInput, setPowerlinkKeywordInput] = useState('')
+  const [powerlinkGenerateBusy, setPowerlinkGenerateBusy] = useState(false)
   const [companySearchInput, setCompanySearchInput] = useState(() =>
     INITIAL_COMPANY_PAGE_DATA?.kind === 'list'
       ? INITIAL_COMPANY_PAGE_DATA.searchQuery
@@ -1418,11 +1423,6 @@ function App() {
         ? 1
         : 0,
   )
-  const [adminCompanySearchInput, setAdminCompanySearchInput] = useState('')
-  const [adminRollingCurrentPage, setAdminRollingCurrentPage] = useState(1)
-  const [adminCompanyCurrentPage, setAdminCompanyCurrentPage] = useState(1)
-  const [adminPowerlinkCurrentPage, setAdminPowerlinkCurrentPage] = useState(1)
-
   const [consultationNameInput, setConsultationNameInput] = useState('')
   const [consultationPhoneInput, setConsultationPhoneInput] = useState('')
   const [consultationDetailsInput, setConsultationDetailsInput] = useState('')
@@ -1433,8 +1433,6 @@ function App() {
   const [consultationNotice, setConsultationNotice] = useState('')
   const [consultationError, setConsultationError] = useState('')
 
-  const [powerlinkKeywordInput, setPowerlinkKeywordInput] = useState('')
-  const [powerlinkGenerateBusy, setPowerlinkGenerateBusy] = useState(false)
   const [heroTypedText, setHeroTypedText] = useState('')
   const [heroDeckShuffleIndex, setHeroDeckShuffleIndex] = useState(0)
   const [companiesBannerTypedText, setCompaniesBannerTypedText] = useState('')
@@ -1473,7 +1471,7 @@ function App() {
     INITIAL_COMPANY_PAGE_DATA?.kind === 'list'
       ? INITIAL_COMPANY_PAGE_DATA.searchQuery
       : getRequestedCompanySearchQuery()
-  const filteredCompanyCases = companyCases
+  const filteredCompanyCases = companyCases.filter((item) => item.isPublic !== false)
   const companyPageCount = Math.max(1, companyTotalPages)
   const activeCompanyPage = Math.min(companyCurrentPage, companyPageCount)
   const paginatedCompanyCases = filteredCompanyCases
@@ -1532,9 +1530,11 @@ function App() {
       return []
     }
 
-    return companyCases
-      .filter((item) => companyCaseMatchesKeyword(item, landingPowerlinkKeyword))
-      .slice(0, KEYWORD_COMPANY_CASE_LIMIT)
+    return shuffleCompanyCases(
+      companyCases.filter(
+        (item) => item.isPublic !== false && companyCaseMatchesKeyword(item, landingPowerlinkKeyword),
+      ),
+    ).slice(0, KEYWORD_COMPANY_CASE_LIMIT)
   }, [companyCases, landingPowerlinkKeyword])
   const keywordSectionCompanyCases = useMemo(() => {
     return landingPowerlinkKeyword ? keywordCompanyCases : []
@@ -2232,7 +2232,7 @@ function App() {
 
           setCompanyCases(
             name && service && description
-              ? [{ id: snapshot.id, name, service, description, image }]
+              ? [{ id: snapshot.id, name, service, description, image, isPublic: data.isPublic !== false }]
               : [],
           )
           setCompanyCasesLoaded(true)
@@ -2284,9 +2284,10 @@ function App() {
               service,
               description,
               image,
+              isPublic: data.isPublic !== false,
             }
           })
-          .filter((item): item is CompanyCase => item !== null)
+          .filter((item) => item !== null)
 
         setCompanyCases(mappedCases)
         setCompanyCasesLoaded(true)
@@ -3055,6 +3056,7 @@ function App() {
     setCompanyServiceInput('')
     setCompanyDescriptionInput('')
     setCompanyImageFile(null)
+    setCompanyIsPublicInput(true)
 
     if (companyImageInputRef.current) {
       companyImageInputRef.current.value = ''
@@ -3068,6 +3070,7 @@ function App() {
     setCompanyServiceInput(item.service)
     setCompanyDescriptionInput(item.description)
     setCompanyImageFile(null)
+    setCompanyIsPublicInput(item.isPublic !== false)
 
     if (companyImageInputRef.current) {
       companyImageInputRef.current.value = ''
@@ -3139,6 +3142,7 @@ function App() {
           service,
           description,
           image,
+          isPublic: companyIsPublicInput,
           updatedAt: serverTimestamp(),
         })
 
@@ -3165,6 +3169,7 @@ function App() {
         service,
         description,
         image,
+        isPublic: companyIsPublicInput,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: currentUser.uid,
@@ -3185,6 +3190,46 @@ function App() {
       )
     } finally {
       setCompanyUploadBusy(false)
+    }
+  }
+
+  const handleToggleCompanyCaseVisibility = async (item: CompanyCase) => {
+    clearAdminFeedback()
+
+    if (!isStaff) {
+      setAdminError('관리자 로그인 후 이용해주세요.')
+      return
+    }
+
+    const isPublic = item.isPublic === false
+    setCompanyVisibilityBusyId(item.id)
+
+    try {
+      await updateDoc(doc(db, 'companyCases', item.id), {
+        isPublic,
+        updatedAt: serverTimestamp(),
+      })
+
+      setCompanyCases((items) =>
+        items.map((currentItem) =>
+          currentItem.id === item.id ? { ...currentItem, isPublic } : currentItem,
+        ),
+      )
+
+      if (companyEditingCaseId === item.id) {
+        setCompanyIsPublicInput(isPublic)
+      }
+
+      setAdminNotice(
+        isPublic
+          ? '사기업체 게시물을 공개했습니다.'
+          : '사기업체 게시물을 비공개 처리했습니다. 관리자 화면에서 계속 수정할 수 있습니다.',
+      )
+    } catch (error) {
+      console.error(error)
+      setAdminError('사기업체 게시물 공개 상태 변경에 실패했습니다.')
+    } finally {
+      setCompanyVisibilityBusyId('')
     }
   }
 
@@ -3557,6 +3602,18 @@ function App() {
                       required
                     />
                   </label>
+                  <label className="admin-visibility-field">
+                    <input
+                      type="checkbox"
+                      checked={companyIsPublicInput}
+                      onChange={(event) => setCompanyIsPublicInput(event.target.checked)}
+                      disabled={companyUploadBusy}
+                    />
+                    <span>
+                      <strong>게시물 공개</strong>
+                      <small>체크를 해제하면 일반 게시판에서는 숨겨지고 관리자만 수정할 수 있습니다.</small>
+                    </span>
+                  </label>
                   <label>
                     {companyEditingCaseId ? '이미지 파일 (선택)' : '이미지 파일'}
                     <input
@@ -3627,16 +3684,48 @@ function App() {
                         <>
                           <ul className="admin-item-list">
                             {paginatedAdminCompanyCases.map((item) => (
-                              <li className="admin-item" key={item.id}>
+                              <li
+                                className={`admin-item${item.isPublic === false ? ' admin-item-private' : ''}`}
+                                key={item.id}
+                              >
                                 <div>
-                                  <p>{item.service}</p>
+                                  <p>
+                                    {item.service}
+                                    <span
+                                      className={`admin-visibility-badge${
+                                        item.isPublic === false ? ' is-private' : ' is-public'
+                                      }`}
+                                    >
+                                      {item.isPublic === false ? '비공개' : '공개'}
+                                    </span>
+                                  </p>
                                   <strong>{item.name}</strong>
                                 </div>
                                 <div className="admin-item-actions">
-                                  <button type="button" onClick={() => handleStartEditCompanyCase(item)}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditCompanyCase(item)}
+                                    disabled={companyVisibilityBusyId === item.id}
+                                  >
                                     수정
                                   </button>
-                                  <button type="button" onClick={() => handleDeleteCompanyCase(item.id, item.image)}>
+                                  <button
+                                    type="button"
+                                    className="admin-visibility-action"
+                                    onClick={() => handleToggleCompanyCaseVisibility(item)}
+                                    disabled={companyVisibilityBusyId === item.id}
+                                  >
+                                    {companyVisibilityBusyId === item.id
+                                      ? '처리 중'
+                                      : item.isPublic === false
+                                        ? '공개'
+                                        : '비공개'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCompanyCase(item.id, item.image)}
+                                    disabled={companyVisibilityBusyId === item.id}
+                                  >
                                     삭제
                                   </button>
                                 </div>
@@ -4090,7 +4179,19 @@ function App() {
             <div className="section-wrap companies-grid-wrap">
               {selectedCompanyCaseId ? (
                 selectedCompanyCase ? (
-                  <>
+                  selectedCompanyCase.isPublic === false ? (
+                    <div className="company-detail company-detail-empty">
+                      <p className="company-detail-deleted-message">
+                        현재 페이지는 삭제되었습니다.
+                        <br />
+                        해당 내용으로 사칭 피해를 보신 분들은 즉시 1551-7203으로 연락 바랍니다.
+                      </p>
+                      <a className="company-detail-back" href={ROUTE_PATHS.companies}>
+                        목록으로
+                      </a>
+                    </div>
+                  ) : (
+                    <>
                     <article className="company-detail">
                       <a className="company-detail-back" href={ROUTE_PATHS.companies}>
                         목록으로
@@ -4125,12 +4226,11 @@ function App() {
                         <img src={naranKakaoBannerImg} alt="법무법인 나란 카카오톡 상담 안내" />
                       </a>
                     </section>
-                  </>
+                    </>
+                  )
                 ) : companyCasesLoaded ? (
                   <div className="company-detail company-detail-empty">
-                    <p className="company-detail-deleted-message">
-                      삭제되었으나 해당 내용으로 피해 보신 분들은 즉시 1551-7203으로 연락 바랍니다.
-                    </p>
+                    <p>게시물을 찾을 수 없습니다.</p>
                     <a className="company-detail-back" href={ROUTE_PATHS.companies}>
                       목록으로
                     </a>

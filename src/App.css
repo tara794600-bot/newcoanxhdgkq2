@@ -70,14 +70,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
-.company-detail-empty .company-detail-deleted-message,
-.company-detail-deleted-message {
-  color: #26384a;
-  font-size: clamp(24px, 2.6vw, 34px);
-  font-weight: 800;
-  line-height: 1.5;
-  word-break: keep-all;
-}
+
 @supports (-webkit-touch-callout: none) {
   .app-shell::before {
     height: calc(var(--safe-area-top) + 32px);
@@ -256,6 +249,43 @@
   font-weight: 600;
 }
 
+.admin-form .admin-visibility-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(99, 119, 145, 0.24);
+  border-radius: 10px;
+  background: #f4f7fb;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.admin-form .admin-visibility-field input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--brand);
+}
+
+.admin-visibility-field span {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-visibility-field strong {
+  color: #334258;
+  font-size: 14px;
+}
+
+.admin-visibility-field small {
+  color: #6b7b90;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .admin-form input,
 .admin-form textarea {
   width: 100%;
@@ -388,11 +418,36 @@
   background: rgba(248, 250, 253, 0.95);
 }
 
+.admin-item.admin-item-private {
+  border-style: dashed;
+  background: rgba(239, 243, 248, 0.95);
+}
+
 .admin-item p {
   margin: 0;
   color: var(--brand);
   font-size: 12px;
   font-weight: 700;
+}
+
+.admin-item .admin-visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 6px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.admin-visibility-badge.is-public {
+  background: #37785a;
+}
+
+.admin-visibility-badge.is-private {
+  background: #7a6071;
 }
 
 .admin-item strong {
@@ -440,6 +495,15 @@
   font-weight: 700;
   cursor: pointer;
   background: linear-gradient(135deg, #4e5f78 0%, #2d3c53 100%);
+}
+
+.admin-item button.admin-visibility-action {
+  background: linear-gradient(135deg, #7a6071 0%, #5d4555 100%);
+}
+
+.admin-item button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .admin-pagination {
@@ -2490,6 +2554,15 @@ main {
   font-weight: 700;
 }
 
+.company-detail-empty .company-detail-deleted-message,
+.company-detail-deleted-message {
+  color: #26384a;
+  font-size: clamp(24px, 2.6vw, 34px);
+  font-weight: 800;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
 .company-card-service {
   margin: 0;
   color: var(--brand);
@@ -3573,6 +3646,11 @@ main {
     margin-top: 14px;
     font-size: 14px;
     line-height: 1.65;
+  }
+
+  .company-detail-empty .company-detail-deleted-message,
+  .company-detail-deleted-message {
+    font-size: clamp(20px, 5.8vw, 26px);
   }
 
   .company-detail-cta {

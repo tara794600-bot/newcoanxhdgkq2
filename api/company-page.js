@@ -351,8 +351,7 @@ const getCompanyCase = async (id) => {
     return null
   }
 
-  const companyCase = mapCompanyCase(snapshot)
-  return companyCase?.isPublic === false ? null : companyCase
+  return mapCompanyCase(snapshot)
 }
 
 const getCompaniesPage = async ({ page, searchQuery }) => {
@@ -527,6 +526,19 @@ const renderCompanyCaseServerContent = (companyCase) => {
   </div>`
 }
 
+const renderDeletedCompanyCaseServerContent = () => `<div class="app-shell">
+  <main>
+    <section class="companies-page" aria-label="삭제된 사기업체 상세 사례">
+      <div class="section-wrap companies-grid-wrap">
+        <article class="company-detail company-detail-empty">
+          <p class="company-detail-deleted-message">현재 페이지는 삭제되었습니다.<br />해당 내용으로 사칭 피해를 보신 분들은 즉시 1551-7203으로 연락 바랍니다.</p>
+          <a class="company-detail-back" href="/companies">목록으로</a>
+        </article>
+      </div>
+    </section>
+  </main>
+</div>`
+
 export const buildCompaniesPageHtml = (html, pageData) => {
   const isSearchPage = Boolean(pageData.searchQuery)
   const pagePath = isSearchPage ? COMPANIES_PAGE_PATH : getCompaniesPagePath(pageData.page)
@@ -664,7 +676,12 @@ export const buildCompanyCasePageHtml = (html, companyCase) => {
     kind: 'detail',
     item: companyCase,
   })
-  nextHtml = replaceRootContent(nextHtml, renderCompanyCaseServerContent(companyCase))
+  nextHtml = replaceRootContent(
+    nextHtml,
+    companyCase.isPublic === false
+      ? renderDeletedCompanyCaseServerContent()
+      : renderCompanyCaseServerContent(companyCase),
+  )
   nextHtml = removeHomepageOnlyStructuredData(nextHtml)
 
   return nextHtml
@@ -673,7 +690,7 @@ export const buildCompanyCasePageHtml = (html, companyCase) => {
 export const buildNotFoundPageHtml = (html, requestedPath) => {
   const canonicalUrl = `${SITE_BASE_URL}${requestedPath}`
   const title = '페이지를 찾을 수 없습니다 | 법무법인 나란'
-  const content = `<div class="app-shell"><main><section class="section-wrap companies-grid-wrap"><h1>페이지를 찾을 수 없습니다.</h1><p class="company-detail-deleted-message">삭제되었으나 해당 내용으로 피해 보신 분들은 즉시 1551-7203으로 연락 바랍니다.</p><a class="company-detail-back" href="/companies">사기업체 게시판으로 이동</a></section></main></div>`
+  const content = `<div class="app-shell"><main><section class="section-wrap companies-grid-wrap"><h1>페이지를 찾을 수 없습니다.</h1><p class="company-detail-deleted-message">현재 페이지는 삭제되었습니다.<br />해당 내용으로 사칭 피해를 보신 분들은 즉시 1551-7203으로 연락 바랍니다.</p><a class="company-detail-back" href="/companies">사기업체 게시판으로 이동</a></section></main></div>`
 
   let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'description', '요청한 페이지를 찾을 수 없습니다.')
@@ -768,7 +785,9 @@ export default async function handler(req, res) {
         res,
         200,
         buildCompanyCasePageHtml(indexHtml, companyCase),
-        'public, s-maxage=300, stale-while-revalidate=3600',
+        companyCase.isPublic === false
+          ? 'private, no-store'
+          : 'public, s-maxage=300, stale-while-revalidate=3600',
       )
     }
 
