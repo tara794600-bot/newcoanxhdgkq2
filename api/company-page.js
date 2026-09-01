@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { randomInt } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +22,12 @@ const COMPANIES_PAGE_KEYWORDS =
 const COMPANY_CASES_PER_PAGE = 40
 const COMPANY_SEARCH_MAX_LENGTH = 120
 const PAGINATION_CRAWL_SEGMENTS = 8
+const COMPANY_PHONE_NUMBER = '1551-7203'
+const COMPANY_PHONE_TEL = `tel:${COMPANY_PHONE_NUMBER.replace(/[^0-9+]/g, '')}`
+
+let companyCasesCache = null
+let companyCasesCacheVersion = ''
+let companyCasesRequest = null
 
 const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -338,9 +345,56 @@ const mapCompanyCase = (snapshot) => {
     description,
     image: image || DEFAULT_IMAGE_URL,
     isPublic: data.isPublic !== false,
+    isSearchBlocked: data.isSearchBlocked === true,
     datePublished: toIsoDateTime(data.createdAt),
     dateModified: toIsoDateTime(data.updatedAt ?? data.createdAt),
   }
+}
+
+export const shuffleCompanyCases = (items, getRandomIndex = randomInt) => {
+  const shuffledItems = [...items]
+
+  for (let index = shuffledItems.length - 1; index > 0; index -= 1) {
+    const randomIndex = getRandomIndex(index + 1)
+    ;[shuffledItems[index], shuffledItems[randomIndex]] = [shuffledItems[randomIndex], shuffledItems[index]]
+  }
+
+  return shuffledItems
+}
+
+const getCompanyCasesVersion = async (collectionRef) => {
+  const [countSnapshot, latestUpdateSnapshot] = await Promise.all([
+    collectionRef.count().get(),
+    collectionRef.orderBy('updatedAt', 'desc').limit(1).get(),
+  ])
+  const latestUpdate = latestUpdateSnapshot.docs[0]
+  const latestUpdatedAt = latestUpdate ? toIsoDateTime(latestUpdate.data()?.updatedAt) : ''
+
+  return `${countSnapshot.data().count}:${latestUpdate?.id ?? ''}:${latestUpdatedAt}`
+}
+
+const getCachedCompanyCases = async (collectionRef) => {
+  const currentVersion = await getCompanyCasesVersion(collectionRef)
+
+  if (companyCasesCache && currentVersion === companyCasesCacheVersion) {
+    return companyCasesCache
+  }
+
+  if (!companyCasesRequest) {
+    companyCasesRequest = collectionRef
+      .get()
+      .then((snapshot) => snapshot.docs.map(mapCompanyCase).filter(Boolean))
+      .then((items) => {
+        companyCasesCache = items
+        companyCasesCacheVersion = currentVersion
+        return items
+      })
+      .finally(() => {
+        companyCasesRequest = null
+      })
+  }
+
+  return companyCasesRequest
 }
 
 const getCompanyCase = async (id) => {
@@ -357,53 +411,22 @@ const getCompanyCase = async (id) => {
 const getCompaniesPage = async ({ page, searchQuery }) => {
   const app = getFirebaseApp()
   const collectionRef = getFirestore(app).collection('companyCases')
-  let items = []
-  let totalCount = 0
+  const allCompanyCases = await getCachedCompanyCases(collectionRef)
+  const publicItems = allCompanyCases.filter((item) => item.isPublic !== false && item.isSearchBlocked !== true)
+  let matchedItems = publicItems
 
   if (searchQuery) {
-    const snapshot = await collectionRef.orderBy('createdAt', 'desc').get()
     const normalizedSearchQuery = searchQuery.toLocaleLowerCase('ko-KR')
-    const matchedItems = snapshot.docs
-      .map(mapCompanyCase)
-      .filter(Boolean)
-      .filter((item) => item.isPublic !== false)
-      .filter((item) =>
-        [item.name, item.service, item.description].some((value) =>
-          value.toLocaleLowerCase('ko-KR').includes(normalizedSearchQuery),
-        ),
-      )
-
-    totalCount = matchedItems.length
-    const startIndex = (page - 1) * COMPANY_CASES_PER_PAGE
-    items = matchedItems.slice(startIndex, startIndex + COMPANY_CASES_PER_PAGE)
-  } else {
-    const privateSnapshot = await collectionRef.where('isPublic', '==', false).limit(1).get()
-
-    if (privateSnapshot.empty) {
-      const countSnapshot = await collectionRef.count().get()
-      totalCount = countSnapshot.data().count
-
-      if (totalCount > 0) {
-        const offset = (page - 1) * COMPANY_CASES_PER_PAGE
-        const snapshot = await collectionRef
-          .orderBy('createdAt', 'desc')
-          .offset(offset)
-          .limit(COMPANY_CASES_PER_PAGE)
-          .get()
-        items = snapshot.docs.map(mapCompanyCase).filter(Boolean)
-      }
-    } else {
-      const snapshot = await collectionRef.orderBy('createdAt', 'desc').get()
-      const publicItems = snapshot.docs
-        .map(mapCompanyCase)
-        .filter(Boolean)
-        .filter((item) => item.isPublic !== false)
-
-      totalCount = publicItems.length
-      const startIndex = (page - 1) * COMPANY_CASES_PER_PAGE
-      items = publicItems.slice(startIndex, startIndex + COMPANY_CASES_PER_PAGE)
-    }
+    matchedItems = publicItems.filter((item) =>
+      [item.name, item.service, item.description].some((value) =>
+        value.toLocaleLowerCase('ko-KR').includes(normalizedSearchQuery),
+      ),
+    )
   }
+
+  const totalCount = matchedItems.length
+  const startIndex = (page - 1) * COMPANY_CASES_PER_PAGE
+  const items = shuffleCompanyCases(matchedItems).slice(startIndex, startIndex + COMPANY_CASES_PER_PAGE)
 
   return {
     items,
@@ -526,27 +549,35 @@ const renderCompanyCaseServerContent = (companyCase) => {
   </div>`
 }
 
-const renderDeletedCompanyCaseServerContent = () => `<div class="app-shell">
+const renderPhoneCompanyCaseServerContent = (companyCase) => `<div class="app-shell">
   <main>
     <section class="companies-page" aria-label="삭제된 사기업체 상세 사례">
       <div class="section-wrap companies-grid-wrap">
-        <article class="company-detail company-detail-empty">
-          <p class="company-detail-deleted-message">현재 페이지는 삭제되었습니다.<br />해당 내용으로 사칭 피해를 보신 분들은 즉시 1551-7203으로 연락 바랍니다.</p>
+        <nav aria-label="경로"><a href="/">홈</a> &gt; <a href="/companies">사기업체 게시판</a> &gt; <span>${escapeHtml(
+          companyCase.name,
+        )}</span></nav>
+        <div class="company-detail company-detail-empty">
+          <p class="company-detail-deleted-message">현재 페이지는 삭제되었습니다.<br />해당 내용으로 사칭 피해를 보신 분들은 즉시 ${COMPANY_PHONE_NUMBER}으로 연락 바랍니다.</p>
+          <a class="company-detail-call" href="${COMPANY_PHONE_TEL}">전화연결</a>
           <a class="company-detail-back" href="/companies">목록으로</a>
-        </article>
+        </div>
       </div>
     </section>
   </main>
 </div>`
 
 export const buildCompaniesPageHtml = (html, pageData) => {
-  const isSearchPage = Boolean(pageData.searchQuery)
-  const pagePath = isSearchPage ? COMPANIES_PAGE_PATH : getCompaniesPagePath(pageData.page)
+  const renderPageData = {
+    ...pageData,
+    items: pageData.items.filter((item) => item.isPublic !== false && item.isSearchBlocked !== true),
+  }
+  const isSearchPage = Boolean(renderPageData.searchQuery)
+  const pagePath = isSearchPage ? COMPANIES_PAGE_PATH : getCompaniesPagePath(renderPageData.page)
   const canonicalUrl = `${SITE_BASE_URL}${pagePath}`
   const title = isSearchPage
-    ? `${pageData.searchQuery} 검색 | 사기업체 게시판 | 법무법인 나란`
-    : pageData.page > 1
-      ? `사기업체 게시판 ${pageData.page}페이지 | 법무법인 나란`
+    ? `${renderPageData.searchQuery} 검색 | 사기업체 게시판 | 법무법인 나란`
+    : renderPageData.page > 1
+      ? `사기업체 게시판 ${renderPageData.page}페이지 | 법무법인 나란`
       : COMPANIES_PAGE_TITLE
 
   let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
@@ -587,10 +618,10 @@ export const buildCompaniesPageHtml = (html, pageData) => {
         mainEntity: {
           '@type': 'ItemList',
           name: '사기업체 사례 게시판',
-          numberOfItems: pageData.totalCount,
-          itemListElement: pageData.items.map((item, index) => ({
+          numberOfItems: renderPageData.totalCount,
+          itemListElement: renderPageData.items.map((item, index) => ({
             '@type': 'ListItem',
-            position: (pageData.page - 1) * COMPANY_CASES_PER_PAGE + index + 1,
+            position: (renderPageData.page - 1) * COMPANY_CASES_PER_PAGE + index + 1,
             name: item.name,
             url: `${SITE_BASE_URL}/companies/${encodeURIComponent(item.id)}`,
           })),
@@ -601,13 +632,13 @@ export const buildCompaniesPageHtml = (html, pageData) => {
   })
   nextHtml = replaceOrInsertBootstrapData(nextHtml, {
     kind: 'list',
-    items: pageData.items,
-    page: pageData.page,
-    searchQuery: pageData.searchQuery,
-    totalCount: pageData.totalCount,
-    totalPages: pageData.totalPages,
+    items: renderPageData.items,
+    page: renderPageData.page,
+    searchQuery: renderPageData.searchQuery,
+    totalCount: renderPageData.totalCount,
+    totalPages: renderPageData.totalPages,
   })
-  nextHtml = replaceRootContent(nextHtml, renderCompaniesServerContent(pageData))
+  nextHtml = replaceRootContent(nextHtml, renderCompaniesServerContent(renderPageData))
   nextHtml = removeHomepageOnlyStructuredData(nextHtml)
 
   return nextHtml
@@ -627,6 +658,12 @@ export const buildCompanyCasePageHtml = (html, companyCase) => {
   let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'description', description)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'keywords', keywords)
+  nextHtml = replaceOrInsertMeta(
+    nextHtml,
+    'name',
+    'robots',
+    'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
+  )
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:type', 'article')
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:site_name', SEARCH_RESULT_SITE_NAME)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:title', title)
@@ -679,7 +716,7 @@ export const buildCompanyCasePageHtml = (html, companyCase) => {
   nextHtml = replaceRootContent(
     nextHtml,
     companyCase.isPublic === false
-      ? renderDeletedCompanyCaseServerContent()
+      ? renderPhoneCompanyCaseServerContent(companyCase)
       : renderCompanyCaseServerContent(companyCase),
   )
   nextHtml = removeHomepageOnlyStructuredData(nextHtml)
@@ -815,7 +852,7 @@ export default async function handler(req, res) {
       res,
       200,
       buildCompaniesPageHtml(indexHtml, pageData),
-      searchQuery ? 'private, no-store' : 'public, s-maxage=300, stale-while-revalidate=3600',
+      'private, no-store',
     )
   } catch (error) {
     console.error('[api/company-page] error', error)

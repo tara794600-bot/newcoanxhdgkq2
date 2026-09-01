@@ -250,33 +250,23 @@
 }
 
 .admin-form .admin-visibility-field {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  gap: 6px;
   border: 1px solid rgba(99, 119, 145, 0.24);
   border-radius: 10px;
   background: #f4f7fb;
   padding: 10px 12px;
-  cursor: pointer;
 }
 
-.admin-form .admin-visibility-field input {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  margin: 2px 0 0;
-  padding: 0;
-  accent-color: var(--brand);
-}
-
-.admin-visibility-field span {
-  display: grid;
-  gap: 2px;
-}
-
-.admin-visibility-field strong {
-  color: #334258;
+.admin-form .admin-visibility-field select {
+  width: 100%;
+  border: 1px solid rgba(99, 119, 145, 0.3);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #314056;
+  font-family: inherit;
   font-size: 14px;
+  padding: 9px 10px;
 }
 
 .admin-visibility-field small {
@@ -287,6 +277,7 @@
 }
 
 .admin-form input,
+.admin-form select,
 .admin-form textarea {
   width: 100%;
   border: 1px solid rgba(99, 119, 145, 0.3);
@@ -299,6 +290,7 @@
 }
 
 .admin-form input:focus,
+.admin-form select:focus,
 .admin-form textarea:focus {
   outline: 2px solid rgba(var(--brand-rgb), 0.22);
 }
@@ -418,7 +410,7 @@
   background: rgba(248, 250, 253, 0.95);
 }
 
-.admin-item.admin-item-private {
+.admin-item.admin-item-hidden {
   border-style: dashed;
   background: rgba(239, 243, 248, 0.95);
 }
@@ -446,8 +438,12 @@
   background: #37785a;
 }
 
-.admin-visibility-badge.is-private {
+.admin-visibility-badge.is-phone {
   background: #7a6071;
+}
+
+.admin-visibility-badge.is-search-blocked {
+  background: #66579a;
 }
 
 .admin-item strong {
@@ -479,6 +475,8 @@
 .admin-item-actions {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   align-items: center;
 }
@@ -499,6 +497,19 @@
 
 .admin-item button.admin-visibility-action {
   background: linear-gradient(135deg, #7a6071 0%, #5d4555 100%);
+}
+
+.admin-item button.admin-visibility-action.visibility-public {
+  background: linear-gradient(135deg, #3f8465 0%, #2d674d 100%);
+}
+
+.admin-item button.admin-visibility-action.visibility-search-blocked {
+  background: linear-gradient(135deg, #7869aa 0%, #554780 100%);
+}
+
+.admin-item button.admin-visibility-action.is-active:disabled {
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(26, 36, 50, 0.22);
 }
 
 .admin-item button:disabled {
@@ -2497,6 +2508,9 @@ main {
 }
 
 .company-detail-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   justify-self: center;
   margin-top: 26px;
   min-width: 170px;
@@ -2509,11 +2523,28 @@ main {
   font-family: inherit;
   font-size: 16px;
   font-weight: 800;
+  text-decoration: none;
   cursor: pointer;
 }
 
 .company-detail-kakao-section {
   margin-top: 28px;
+}
+
+.company-detail-call {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 150px;
+  min-height: 44px;
+  margin-top: 20px;
+  border-radius: 999px;
+  padding: 10px 22px;
+  background: linear-gradient(135deg, var(--brand-light) 0%, var(--brand-deep) 100%);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .company-detail-kakao-banner {
