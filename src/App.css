@@ -2528,6 +2528,8 @@ main {
 }
 
 .company-detail-kakao-section {
+  display: grid;
+  gap: 16px;
   margin-top: 28px;
 }
 

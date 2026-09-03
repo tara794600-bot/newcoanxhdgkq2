@@ -31,7 +31,8 @@ import icon4Img from './assets/icon4.png'
 import ssImg from './assets/ss.png'
 import logoImg from './assets/logo.png'
 import kakaoIconImg from './assets/kakao.png'
-import naranKakaoBannerImg from './assets/나란kakao.jpg'
+import kakaoConnectBannerImg from './assets/카톡 연결.png'
+import phoneConnectBannerImg from './assets/전화 연결.png'
 import law1Img from './assets/law1.png'
 import law2Img from './assets/law2.png'
 import law3Img from './assets/law3.png'
@@ -4281,7 +4282,14 @@ function App() {
                       </div>
                     </article>
 
-                    <section className="company-detail-kakao-section" aria-label="카카오톡 상담 배너">
+                    <section className="company-detail-kakao-section" aria-label="전화 및 카카오톡 상담 배너">
+                      <a
+                        className="company-detail-kakao-banner"
+                        href={CONTACT_PHONE_TEL}
+                        aria-label="법무법인 나란 1551-7202 전화 상담 연결"
+                      >
+                        <img src={phoneConnectBannerImg} alt="법무법인 나란 무료상담 전화연결 1551-7202" />
+                      </a>
                       <a
                         className="company-detail-kakao-banner"
                         href={KAKAO_OPEN_CHAT_URL}
@@ -4289,7 +4297,7 @@ function App() {
                         rel="noreferrer noopener"
                         aria-label="법무법인 나란 카카오톡 상담 열기"
                       >
-                        <img src={naranKakaoBannerImg} alt="법무법인 나란 카카오톡 상담 안내" />
+                        <img src={kakaoConnectBannerImg} alt="법무법인 나란 카카오톡 무료상담 연결" />
                       </a>
                     </section>
                     </>
