@@ -4209,3 +4209,9 @@ main {
     animation: none;
   }
 }
+.companies-grid .company-card-filled {
+  border-color: transparent;
+  background:
+    linear-gradient(#f7f9fc, #f7f9fc) padding-box,
+    linear-gradient(135deg, #b3976b 0%, #f1dfb5 24%, #b89b6c 48%, #f8edce 72%, #b3976b 100%) border-box;
+}
