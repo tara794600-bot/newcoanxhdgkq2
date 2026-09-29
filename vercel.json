@@ -2,6 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
     {
+      "source": "/lawyers/",
+      "destination": "/lawyers",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [
         {
@@ -35,10 +40,21 @@
   ],
   "functions": {
     "api/company-page.js": {
-      "includeFiles": "dist/index.html"
+      "includeFiles": "dist/app-shell.html"
+    },
+    "api/site-page.js": {
+      "includeFiles": "dist/prerender/**"
     }
   },
   "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/site-page?route=home"
+    },
+    {
+      "source": "/lawyers",
+      "destination": "/api/site-page?route=lawyers"
+    },
     {
       "source": "/sitemap.xml",
       "destination": "/api/sitemap"

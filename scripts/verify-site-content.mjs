@@ -6,13 +6,14 @@ import { getRequestContentSite } from '../server/content-site.js'
 import { buildCompaniesPageHtml, buildCompanyCasePageHtml, buildNotFoundPageHtml } from '../api/company-page.js'
 import { renderSitemap } from '../api/sitemap.js'
 
-const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8')
+const html = await readFile(new URL('../dist/app-shell.html', import.meta.url), 'utf8')
 const original = Object.freeze({
   id: 'shared-post', name: '샘플 업체', service: '투자사기',
   description: '원문 첫 줄입니다.\n두 번째 줄의 사실관계를 그대로 보존합니다.',
   image: '/logo.png', isPublic: true, isSearchBlocked: false,
 })
 const variants = createCompanyContentVariants(original)
+const cachedItems = Object.freeze([original])
 assert.equal(new Set(Object.values(variants).map((item) => item.title)).size, 3)
 assert.equal(new Set(Object.values(variants).map((item) => item.description)).size, 3)
 
@@ -47,13 +48,19 @@ for (const site of CONTENT_SITES) {
   assert.equal(readBootstrap(detail).item.description, expected.description)
   assert.equal(readBootstrap(detail).item.name, expected.name)
   assert.equal(readArticle(detail).headline, expected.name)
+  assert.equal(readArticle(detail).image, `${site.url}/logo.png`)
   assert.equal(readArticle(detail).description, expected.description.replace(/\s+/g, ' '))
   if (site.id !== 'site1') assert.ok(!detail.includes(CONTENT_SITES[0].url))
 
-  const list = buildCompaniesPageHtml(html, { items: [original], page: 1, searchQuery: '', totalCount: 1, totalPages: 1 }, site)
+  const list = buildCompaniesPageHtml(html, { items: cachedItems, page: 1, searchQuery: '', totalCount: 1, totalPages: 1 }, site)
   assert.equal(readBootstrap(list).items[0].name, expected.name)
   assert.equal(readBootstrap(list).items[0].description, expected.description)
   assert.ok(list.includes(`<p class="company-card-name">${expected.name}</p>`))
+  assert.ok(list.includes(`src="${site.url}/logo.png"`))
+  for (const otherSite of CONTENT_SITES.filter((other) => other.id !== site.id)) {
+    assert.ok(!detail.includes(otherSite.url))
+    assert.ok(!list.includes(otherSite.url))
+  }
   assert.ok(buildNotFoundPageHtml(html, '/companies/missing', site).includes(`${site.url}/companies/missing`))
   assert.ok(renderSitemap([], site).includes(`<loc>${site.url}/companies</loc>`))
 

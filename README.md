@@ -1,23 +1,34 @@
 # React + TypeScript + Vite
 
+## 홈페이지와 변호사 소개의 초기 HTML
+
+홈페이지(`/`)와 변호사 소개(`/lawyers`)는 `npm run build` 실행 시 실제 React 화면을 HTML로 생성합니다. JavaScript가 실행되기 전에도 본문, 제목, 내부 링크와 변호사 프로필을 읽을 수 있습니다.
+
+- `src/entry-server.tsx`와 `scripts/prerender.mjs`에서 생성하며, 화면과 메타 정보는 클라이언트와 공유합니다.
+- `dist/prerender/{site1,site2,site3}/`에 도메인별 HTML을 생성하고 `api/site-page.js`가 요청 Host에 맞는 파일을 제공합니다.
+- 로컬/미리보기 기본 도메인은 기존 뉴스 도메인(`site2`)이며 `VITE_SITE_ID` 또는 `VITE_SITE_URL`로 변경할 수 있습니다.
+- 게시판 API는 별도의 빈 `dist/app-shell.html`을 사용하므로 홈페이지 본문이 상세 페이지에 섞이지 않습니다.
+- 본문이나 프로필 변경 후에는 다시 빌드·배포해야 합니다. 운영 사이트 적용에는 재배포가 필요합니다.
+- 검증: `npm run build`, `npm run lint`, `npm run verify:seo`.
+
 ## 세 홈페이지 게시글 자동 변환
 
-관리자에서 사기업체 **업체명·유형·설명을 한 번만 작성**하면 각 홈페이지에서 서로 다른 제목과 설명을 자동으로 표시합니다. 작성·수정 폼의 **세 홈페이지 자동 변환 미리보기**에서 결과를 확인할 수 있습니다.
+관리자에서 업체명·유형·설명을 한 번만 작성하면 접속 도메인별 제목과 설명이 자동 적용됩니다. 작성·수정 폼의 **세 홈페이지 자동 변환 미리보기**에서 결과를 확인할 수 있습니다.
 
 | 도메인 | 자동 적용 방식 |
 | --- | --- |
 | `www.naranfintech.com` | 원래 업체명과 설명 |
-| `www.naranfintechnews.co.kr` | `업체명 \| 유형 사례 정리` 제목과 사례 안내 문구 + 원문 설명 |
+| `www.naranfintechnews.co.kr` | `업체명 \| 유형 사례 정리` 제목과 사례 안내 + 원문 설명 |
 | `www.xn--naranfintech-t458b147kl8ppf0a.kr` | `업체명 피해 관련 확인 사항` 제목과 유형 안내 + 원문 설명 |
 
-변환은 외부 AI 호출 없이 고정 문구 규칙으로 처리합니다. 원문을 임의로 요약하거나 사실관계를 바꾸지 않습니다. 문구 규칙과 도메인은 `shared/company-content.js`에서 관리합니다.
+이 프로젝트의 로컬/미리보기 기본값은 뉴스 도메인(`site2`)입니다. 운영 환경에서는 서버의 요청 Host와 브라우저의 접속 도메인으로 구분합니다. 다른 사이트의 미리보기는 `VITE_SITE_ID=site1`, `site2`, `site3`으로 선택할 수 있습니다.
 
-- Firestore `companyCases`의 기존 필드에 원문 한 벌만 저장합니다. DB 필드나 보안 규칙 변경이 필요 없으며 기존 글에도 자동 적용됩니다.
-- 서버에서는 요청의 Host, 브라우저에서는 접속 도메인으로 구분합니다. 게시판·상세 페이지·파워링크 관련 글과 게시글 title/description, OG, Twitter, 구조화 데이터에 적용됩니다.
-- 글을 수정하면 세 사이트가 같은 원문에서 다시 변환하므로 안내 문구가 중복 누적되지 않습니다. 서버 상세 페이지는 기존 캐시 설정에 따라 갱신이 지연될 수 있습니다.
-- 세 도메인이 하나의 배포에 연결되어 있으면 이 코드를 한 번 배포합니다. **홈페이지가 별도 프로젝트로 배포되어 있으면 각 프로젝트에도 이 읽기/렌더링 코드를 적용해야 합니다.** DB만 공유하고 예전 코드로 읽는 홈페이지에는 변환이 적용되지 않습니다.
-- 로컬/미리보기 도메인에서는 `VITE_SITE_ID=site1`, `site2`, `site3` 중 하나로 테스트할 수 있습니다. 운영 도메인은 자동 인식합니다.
-- 확인: `npm run build`, `npm run lint`, `npm run verify:seo`.
+- 변환 규칙은 `shared/company-content.js`에서 관리합니다. 외부 AI 호출 없이 고정 문구를 적용하고 설명 원문은 보존합니다.
+- Firestore와 서버의 게시글 캐시에는 원문만 보관합니다. 기존 글에도 자동 적용되며 DB 필드나 보안 규칙 변경은 필요 없습니다.
+- 관리자 편집용 원문과 공개 화면 데이터를 분리해 수정할 때 변환 문구가 중복 저장되지 않습니다.
+- 게시판·상세·파워링크 관련 글, title/description, OG, Twitter, 구조화 데이터에 같은 문구를 적용합니다. 대표 URL과 사이트맵도 접속 도메인에 맞춥니다.
+- 세 홈페이지가 별도 배포 프로젝트라면 각각 변경 코드를 배포해야 합니다. 상세 페이지 캐시는 기존 정책에 따라 갱신이 지연될 수 있습니다.
+- 검증: `npm run build`, `npm run lint`, `npm run verify:seo`.
 
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
