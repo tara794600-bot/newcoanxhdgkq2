@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:seo": "node scripts/verify-seo-rendering.mjs && node scripts/verify-site-content.mjs && node scripts/verify-public-pages.mjs",
+    "verify:rss": "node scripts/verify-rss.mjs",
     "powerlink:url": "node scripts/generate-powerlink-url.mjs"
   },
   "dependencies": {

@@ -60,6 +60,10 @@
       "destination": "/api/sitemap"
     },
     {
+      "source": "/rss.xml",
+      "destination": "/api/rss"
+    },
+    {
       "source": "/companies",
       "destination": "/api/company-page"
     },

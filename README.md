@@ -1,5 +1,15 @@
 # React + TypeScript + Vite
 
+## 최신 상세페이지 RSS
+
+- `/rss.xml`은 `api/rss.js`에서 Firestore `companyCases`를 조회해 동적으로 생성합니다.
+- 등록일(`createdAt`) 내림차순으로 최신 상세페이지를 최대 500개 제공합니다. 일반 공개 글과 **검색차단 글도 포함**하며, 전화상담 전용(`isPublic: false`) 글과 필수 내용이 없는 글은 제외합니다. 대상이 500개 미만이면 있는 글만 제공합니다.
+- 접속 도메인에 맞는 제목·설명·상세 URL을 사용하며, 항목에는 등록일과 최대 600자의 설명 요약이 들어갑니다.
+- CDN 캐시는 5분이며 새 글·수정·삭제는 캐시 만료 후 요청 시 반영됩니다. 글이 바뀔 때마다 다시 빌드할 필요는 없습니다.
+- 기존 사이트맵과 동일한 `FIREBASE_SERVICE_ACCOUNT_JSON` 또는 `GOOGLE_SERVICE_ACCOUNT_JSON` 서버 환경변수를 사용합니다. DB 조회 실패 시 빈 RSS 대신 캐시하지 않는 503 응답을 반환합니다.
+- 최초 적용에는 Vercel 재배포가 필요합니다. 정적 `public/rss.xml`은 제거했고, 빌드에서도 정적 RSS가 배포 결과에 남지 않도록 처리합니다. RSS API 확인은 Vercel 환경에서 가능합니다(`vite` 단독 실행은 API를 제공하지 않습니다).
+- 검증: `npm run verify:rss`, `npm run build`, `npm run lint`, `npm run verify:seo`.
+
 ## 홈페이지와 변호사 소개의 초기 HTML
 
 홈페이지(`/`)와 변호사 소개(`/lawyers`)는 `npm run build` 실행 시 실제 React 화면을 HTML로 생성합니다. JavaScript가 실행되기 전에도 본문, 제목, 내부 링크와 변호사 프로필을 읽을 수 있습니다.
