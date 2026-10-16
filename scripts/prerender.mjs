@@ -1,8 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { build, loadEnv } from 'vite'
-import { CONTENT_SITES, getContentSite } from '../shared/company-content.js'
+import { build } from 'vite'
 import { buildPublicPageHtml } from '../server/public-page-html.js'
 
 const projectRoot = process.cwd()
@@ -24,19 +23,13 @@ await build({
   },
 })
 const { renderPublicPage } = await import(pathToFileURL(path.join(rendererDir, 'entry-server.js')).href)
-const env = { ...loadEnv('production', projectRoot, 'VITE_'), ...process.env }
-const defaultSite = getContentSite({ siteId: env.VITE_SITE_ID, siteUrl: env.VITE_SITE_URL || 'https://www.naranfintechnews.co.kr' })
+const directory = path.join(dist, 'prerender')
+await mkdir(directory, { recursive: true })
 
 for (const [route, pathname] of [['home', '/'], ['lawyers', '/lawyers']]) {
   const markup = renderPublicPage(pathname)
-  for (const site of CONTENT_SITES) {
-    const html = buildPublicPageHtml(template, markup, route, site)
-    const directory = path.join(dist, 'prerender', site.id)
-    await mkdir(directory, { recursive: true })
-    await writeFile(path.join(directory, `${route}.html`), html)
-    if (site.id === defaultSite.id) {
-      await writeFile(path.join(dist, route === 'home' ? 'index.html' : 'lawyers.html'), html)
-    }
-  }
+  const html = buildPublicPageHtml(template, markup, route)
+  await writeFile(path.join(directory, `${route}.html`), html)
+  await writeFile(path.join(dist, route === 'home' ? 'index.html' : 'lawyers.html'), html)
 }
-console.log('Initial HTML generated: home and lawyers, across all three domains.')
+console.log('Initial HTML generated: news site home and lawyers.')

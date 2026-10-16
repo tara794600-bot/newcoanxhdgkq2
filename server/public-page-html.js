@@ -1,4 +1,5 @@
 import { SEO_META_BY_ROUTE } from '../shared/page-meta.js'
+import { CONTENT_SITE } from '../shared/company-content.js'
 
 const escapeHtml = (value) => String(value)
   .replace(/&/g, '&amp;')
@@ -7,16 +8,16 @@ const escapeHtml = (value) => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
-export const buildPublicPageHtml = (template, markup, route, site) => {
+export const buildPublicPageHtml = (template, markup, route) => {
   if (route !== 'home' && route !== 'lawyers') throw new Error('Unsupported public page')
   if (!template.includes('<div id="root"></div>')) throw new Error('Expected an empty app shell')
 
   const meta = SEO_META_BY_ROUTE[route]
-  const canonical = `${site.url}${meta.path}`
+  const canonical = `${CONTENT_SITE.url}${meta.path}`
   const templateCanonical = template.match(/<link\s+[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)
   if (!templateCanonical) throw new Error('Expected a canonical URL in the app shell')
   const templateOrigin = new URL(templateCanonical[1]).origin
-  let html = template.replaceAll(templateOrigin, site.url)
+  let html = template.replaceAll(templateOrigin, CONTENT_SITE.url)
   html = html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(meta.title)}</title>`)
 
   const setMeta = (attribute, key, value) => {
@@ -32,10 +33,10 @@ export const buildPublicPageHtml = (template, markup, route, site) => {
   setMeta('property', 'og:title', meta.title)
   setMeta('property', 'og:description', meta.description)
   setMeta('property', 'og:url', canonical)
-  setMeta('property', 'og:image', `${site.url}/logo.png`)
+  setMeta('property', 'og:image', `${CONTENT_SITE.url}/logo.png`)
   setMeta('name', 'twitter:title', meta.title)
   setMeta('name', 'twitter:description', meta.description)
-  setMeta('name', 'twitter:image', `${site.url}/logo.png`)
+  setMeta('name', 'twitter:image', `${CONTENT_SITE.url}/logo.png`)
   html = html.replace(/<link\s+[^>]*rel=["']canonical["'][^>]*>/i,
     () => `<link rel="canonical" href="${escapeHtml(canonical)}" />`)
   const structuredData = {
@@ -45,8 +46,8 @@ export const buildPublicPageHtml = (template, markup, route, site) => {
     description: meta.description,
     url: canonical,
     inLanguage: 'ko-KR',
-    isPartOf: { '@id': `${site.url}/#website` },
-    about: { '@id': `${site.url}/#legalservice` },
+    isPartOf: { '@id': `${CONTENT_SITE.url}/#website` },
+    about: { '@id': `${CONTENT_SITE.url}/#legalservice` },
   }
   html = html.replace('</head>', () =>
     `<script id="public-page-structured-data" type="application/ld+json">${JSON.stringify(structuredData).replace(/</g, '\\u003c')}</script>\n</head>`)

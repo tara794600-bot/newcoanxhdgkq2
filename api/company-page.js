@@ -4,12 +4,9 @@ import { randomInt } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { matchesCompanySearch, resolveCompanyContent } from '../shared/company-content.js'
-import { getRequestContentSite } from '../server/content-site.js'
+import { CONTENT_SITE, matchesCompanySearch, resolveCompanyContent } from '../shared/company-content.js'
 
-const DEFAULT_SITE = getRequestContentSite()
-const SITE_BASE_URL = DEFAULT_SITE.url
-const TEMPLATE_SITE_URL = 'https://www.naranfintechnews.co.kr'
+const SITE_BASE_URL = CONTENT_SITE.url
 const DESCRIPTION_MAX_LENGTH = 155
 const SEARCH_RESULT_SITE_NAME = '법무법인나란'
 const SEARCH_RESULT_SECTION_NAME = '핀테크전문'
@@ -376,7 +373,7 @@ const getCompanyCasesVersion = async (collectionRef) => {
 }
 
 const getCachedCompanyCases = async (collectionRef) => {
-  // Cache originals only; resolve domain-specific copy after reading this cache.
+  // Cache originals only; apply the news introduction after reading this cache.
   const currentVersion = await getCompanyCasesVersion(collectionRef)
 
   if (companyCasesCache && currentVersion === companyCasesCacheVersion) {
@@ -411,7 +408,7 @@ const getCompanyCase = async (id) => {
   return mapCompanyCase(snapshot)
 }
 
-const getCompaniesPage = async ({ page, searchQuery }, site) => {
+const getCompaniesPage = async ({ page, searchQuery }) => {
   const app = getFirebaseApp()
   const collectionRef = getFirestore(app).collection('companyCases')
   const allCompanyCases = await getCachedCompanyCases(collectionRef)
@@ -419,7 +416,7 @@ const getCompaniesPage = async ({ page, searchQuery }, site) => {
   let matchedItems = publicItems
 
   if (searchQuery) {
-    matchedItems = publicItems.filter((item) => matchesCompanySearch(item, searchQuery, site.id))
+    matchedItems = publicItems.filter((item) => matchesCompanySearch(item, searchQuery))
   }
 
   const totalCount = matchedItems.length
@@ -564,14 +561,12 @@ const renderPhoneCompanyCaseServerContent = (companyCase) => `<div class="app-sh
   </main>
 </div>`
 
-export const buildCompaniesPageHtml = (html, pageData, site = DEFAULT_SITE) => {
-  html = html.replaceAll(TEMPLATE_SITE_URL, site.url)
-  const SITE_BASE_URL = site.url
+export const buildCompaniesPageHtml = (html, pageData) => {
   const DEFAULT_IMAGE_URL = `${SITE_BASE_URL}/logo.png`
   const renderPageData = {
     ...pageData,
     items: pageData.items
-      .map((item) => resolveCompanyContent(item, site.id))
+      .map((item) => resolveCompanyContent(item))
       .filter((item) => item.isPublic !== false && item.isSearchBlocked !== true),
   }
   const isSearchPage = Boolean(renderPageData.searchQuery)
@@ -647,10 +642,8 @@ export const buildCompaniesPageHtml = (html, pageData, site = DEFAULT_SITE) => {
   return nextHtml
 }
 
-export const buildCompanyCasePageHtml = (html, rawCompanyCase, site = DEFAULT_SITE) => {
-  html = html.replaceAll(TEMPLATE_SITE_URL, site.url)
-  const companyCase = resolveCompanyContent(rawCompanyCase, site.id)
-  const SITE_BASE_URL = site.url
+export const buildCompanyCasePageHtml = (html, rawCompanyCase) => {
+  const companyCase = resolveCompanyContent(rawCompanyCase)
   const DEFAULT_IMAGE_URL = `${SITE_BASE_URL}/logo.png`
   const path = `/companies/${encodeURIComponent(companyCase.id)}`
   const canonicalUrl = `${SITE_BASE_URL}${path}`
@@ -731,9 +724,7 @@ export const buildCompanyCasePageHtml = (html, rawCompanyCase, site = DEFAULT_SI
   return nextHtml
 }
 
-export const buildNotFoundPageHtml = (html, requestedPath, site = DEFAULT_SITE) => {
-  html = html.replaceAll(TEMPLATE_SITE_URL, site.url)
-  const SITE_BASE_URL = site.url
+export const buildNotFoundPageHtml = (html, requestedPath) => {
   const canonicalUrl = `${SITE_BASE_URL}${requestedPath}`
   const title = '페이지를 찾을 수 없습니다 | 법무법인 나란'
   const content = `<div class="app-shell"><main><section class="section-wrap companies-grid-wrap"><h1>페이지를 찾을 수 없습니다.</h1><p class="company-detail-deleted-message">현재 페이지는 삭제되었습니다.<br />해당 내용으로 사칭 피해를 보신 분들은 즉시 1551-7203으로 연락 바랍니다.</p><a class="company-detail-back" href="/companies">사기업체 게시판으로 이동</a></section></main></div>`
@@ -815,7 +806,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const site = getRequestContentSite(req)
     const id = getRequestCompanyCaseId(req)
     const indexHtml = await getIndexHtml()
 
@@ -824,14 +814,14 @@ export default async function handler(req, res) {
 
       if (!companyCase) {
         const requestedPath = `/companies/${encodeURIComponent(id)}`
-        return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, requestedPath, site), 'no-store')
+        return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, requestedPath), 'no-store')
       }
 
       return sendHtml(
         req,
         res,
         200,
-        buildCompanyCasePageHtml(indexHtml, companyCase, site),
+        buildCompanyCasePageHtml(indexHtml, companyCase),
         companyCase.isPublic === false
           ? 'private, no-store'
           : 'public, s-maxage=300, stale-while-revalidate=3600',
@@ -842,17 +832,17 @@ export default async function handler(req, res) {
     const searchQuery = getRequestQueryValue(req, 'q').slice(0, COMPANY_SEARCH_MAX_LENGTH)
 
     if (!requestedPage.valid) {
-      return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, COMPANIES_PAGE_PATH, site), 'no-store')
+      return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, COMPANIES_PAGE_PATH), 'no-store')
     }
 
-    const pageData = await getCompaniesPage({ page: requestedPage.page, searchQuery }, site)
+    const pageData = await getCompaniesPage({ page: requestedPage.page, searchQuery })
 
     if (pageData.totalCount > 0 && pageData.page > pageData.totalPages) {
       return sendHtml(
         req,
         res,
         404,
-        buildNotFoundPageHtml(indexHtml, getCompaniesPagePath(pageData.page, searchQuery), site),
+        buildNotFoundPageHtml(indexHtml, getCompaniesPagePath(pageData.page, searchQuery)),
         'no-store',
       )
     }
@@ -861,7 +851,7 @@ export default async function handler(req, res) {
       req,
       res,
       200,
-      buildCompaniesPageHtml(indexHtml, pageData, site),
+      buildCompaniesPageHtml(indexHtml, pageData),
       'private, no-store',
     )
   } catch (error) {

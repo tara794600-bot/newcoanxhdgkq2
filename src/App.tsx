@@ -39,7 +39,7 @@ import law3Img from './assets/law3.png'
 import bannerImg from './assets/banner.png'
 import { auth, db, isFirebaseConfigured, storage } from './firebase'
 import { CompanyContentPreview } from './components/CompanyContentPreview'
-import { getContentSite, resolveCompanyContent } from '../shared/company-content.js'
+import { CONTENT_SITE, resolveCompanyContent } from '../shared/company-content.js'
 import { DEFAULT_SEO_KEYWORDS, SEO_META_BY_ROUTE } from '../shared/page-meta.js'
 import './App.css'
 
@@ -215,11 +215,6 @@ const ROUTE_PATHS: Record<PageRoute, string> = {
   admin: '/admin',
 }
 
-const CONTENT_SITE = getContentSite({
-  hostname: typeof window === 'undefined' ? '' : window.location.hostname,
-  siteId: import.meta.env.VITE_SITE_ID,
-  siteUrl: import.meta.env.VITE_SITE_URL || 'https://www.naranfintechnews.co.kr',
-})
 const SITE_BASE_URL = CONTENT_SITE.url
 const SEARCH_RESULT_SITE_NAME = '법무법인나란'
 const SEARCH_RESULT_SECTION_NAME = '핀테크전문'
@@ -1388,7 +1383,7 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
   const [isStaffCheckPending, setIsStaffCheckPending] = useState(isFirebaseConfigured)
 
   const [rollingCases, setRollingCases] = useState<RollingCase[]>([])
-  // Admin forms edit the stored original, never a domain-specific rendering.
+  // Admin forms edit the stored original before applying the news introduction.
   const [adminCompanyCases, setAdminCompanyCases] = useState<CompanyCase[]>([])
   const [companyCases, setCompanyCases] = useState<CompanyCase[]>(() => {
     if (INITIAL_COMPANY_PAGE_DATA?.kind === 'detail') {
@@ -2248,7 +2243,7 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
             return
           }
 
-          const data = resolveCompanyContent(snapshot.data(), CONTENT_SITE.id)
+          const data = resolveCompanyContent(snapshot.data())
           const name = toTrimmedString(data.name)
           const service = toTrimmedString(data.service)
           const description = toTrimmedString(data.description)
@@ -2319,7 +2314,7 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
         if (route === 'admin') {
           setAdminCompanyCases(mappedCases)
         }
-        const publicCases = mappedCases.map((item) => resolveCompanyContent(item, CONTENT_SITE.id))
+        const publicCases = mappedCases.map((item) => resolveCompanyContent(item))
         setCompanyCases(route === 'companies' ? shuffleCompanyCases(publicCases) : publicCases)
         setCompanyCasesLoaded(true)
       },

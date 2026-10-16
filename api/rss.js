@@ -1,6 +1,5 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
-import { getRequestContentSite } from '../server/content-site.js'
 import { getLatestRssCompanyCases, renderRss } from '../server/rss.js'
 
 const parseJsonEnv = (key) => {
@@ -38,7 +37,7 @@ export const createRssHandler = (loadItems = loadCompanyCases) => async (req, re
 
   try {
     const companyCases = await loadItems()
-    const rss = renderRss(companyCases, getRequestContentSite(req))
+    const rss = renderRss(companyCases)
     res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8')
     res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300')
 

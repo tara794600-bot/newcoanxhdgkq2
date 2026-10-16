@@ -1,4 +1,4 @@
-import { resolveCompanyContent } from '../shared/company-content.js'
+import { CONTENT_SITE, resolveCompanyContent } from '../shared/company-content.js'
 import { SEO_META_BY_ROUTE } from '../shared/page-meta.js'
 
 export const RSS_ITEM_LIMIT = 500
@@ -59,10 +59,10 @@ const getDescriptionExcerpt = (value) => {
     : value
 }
 
-export const renderRss = (companyCases, site, buildDate = new Date()) => {
+export const renderRss = (companyCases, buildDate = new Date()) => {
   const items = companyCases.slice(0, RSS_ITEM_LIMIT).map((companyCase) => {
-    const content = resolveCompanyContent(companyCase, site.id)
-    const url = `${site.url}/companies/${encodeURIComponent(companyCase.id)}`
+    const content = resolveCompanyContent(companyCase)
+    const url = `${CONTENT_SITE.url}/companies/${encodeURIComponent(companyCase.id)}`
     const pubDate = toRssDate(companyCase.createdAt)
 
     return `    <item>
@@ -78,8 +78,8 @@ export const renderRss = (companyCases, site, buildDate = new Date()) => {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${escapeXml(SEO_META_BY_ROUTE.home.title)}</title>
-    <link>${escapeXml(site.url)}/</link>
-    <atom:link href="${escapeXml(site.url)}/rss.xml" rel="self" type="application/rss+xml" />
+    <link>${escapeXml(CONTENT_SITE.url)}/</link>
+    <atom:link href="${escapeXml(CONTENT_SITE.url)}/rss.xml" rel="self" type="application/rss+xml" />
     <description>${escapeXml(SEO_META_BY_ROUTE.companies.description)}</description>
     <language>ko-KR</language>
     <lastBuildDate>${toRssDate(buildDate)}</lastBuildDate>

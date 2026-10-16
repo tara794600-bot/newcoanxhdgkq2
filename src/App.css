@@ -336,12 +336,6 @@
   background: rgba(var(--brand-rgb), 0.04);
 }
 
-.admin-site-domain {
-  color: #677587;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
 .admin-form button {
   margin-top: 4px;
   border: none;

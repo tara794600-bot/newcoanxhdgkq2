@@ -4,7 +4,7 @@ import { mock } from 'node:test'
 import { Timestamp } from 'firebase-admin/firestore'
 import { createRssHandler } from '../api/rss.js'
 import { getLatestRssCompanyCases, renderRss } from '../server/rss.js'
-import { CONTENT_SITES } from '../shared/company-content.js'
+import { CONTENT_SITE } from '../shared/company-content.js'
 
 const createdAt = Timestamp.fromDate(new Date('2026-10-07T00:00:00Z'))
 const post = (id, overrides = {}) => ({
@@ -74,19 +74,19 @@ const response = () => ({
 })
 
 const handler = createRssHandler(() => getLatestRssCompanyCases(collection(documents)))
-for (const site of CONTENT_SITES) {
-  const req = { method: 'GET', headers: { host: new URL(site.url).host } }
+// Host headers must not change the feed's content or canonical URLs.
+for (const host of ['www.naranfintechnews.co.kr', 'www.naranfintech.com', 'www.xn--naranfintech-t458b147kl8ppf0a.kr', 'localhost', 'preview.vercel.app', undefined]) {
+  const req = { method: 'GET', headers: { host } }
   const res = response()
   await handler(req, res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.headers['Content-Type'], 'application/rss+xml; charset=utf-8')
   assert.equal(res.headers['Cache-Control'], 'public, max-age=0, s-maxage=300')
   assert.equal((res.body.match(/<item>/g) ?? []).length, 500)
-  assert.ok(res.body.includes(`<link>${site.url}/companies/post-001</link>`))
-  assert.ok(res.body.includes(`href="${site.url}/rss.xml"`))
+  assert.ok(res.body.includes(`<link>${CONTENT_SITE.url}/companies/post-001</link>`))
+  assert.ok(res.body.includes(`href="${CONTENT_SITE.url}/rss.xml"`))
   assert.doesNotMatch(res.body, /\/companies\/post-000<|\/companies\/post-002</)
-  for (const otherSite of CONTENT_SITES.filter((other) => other.id !== site.id)) assert.ok(!res.body.includes(otherSite.url))
-  const expectedTitle = site.id === 'site1' ? '업체 new-19' : site.id === 'site2' ? '업체 new-19 | 투자 사례 사례 정리' : '업체 new-19 피해 관련 확인 사항'
+  const expectedTitle = '업체 new-19 | 투자 사례 사례 정리'
   assert.ok(res.body.includes(`<title>${expectedTitle}</title>`))
   const head = response()
   await handler({ ...req, method: 'HEAD' }, head)
@@ -102,14 +102,14 @@ assert.match(refreshed.body, /<item>\s*<title>업체 just-published/)
 assert.equal((refreshed.body.match(/<item>/g) ?? []).length, 500)
 
 const special = { id: '한글 &?#', name: '이름 & <태그> "인용"', service: '유형 & 분류', description: '본문 ]]> & < > \u0000\u0001\uD800 😀', createdAt }
-const xml = renderRss([special], CONTENT_SITES[0], createdAt.toDate())
+const xml = renderRss([special], createdAt.toDate())
 assert.match(xml, /이름 &amp; &lt;태그&gt; &quot;인용&quot;/)
 assert.match(xml, /본문 \]\]&gt; &amp; &lt; &gt;  😀/)
 assert.ok(xml.includes(`/companies/${encodeURIComponent(special.id)}`))
 assert.match(xml, /<pubDate>Wed, 07 Oct 2026 00:00:00 GMT<\/pubDate>/)
 assert.match(xml, /<lastBuildDate>Wed, 07 Oct 2026 00:00:00 GMT<\/lastBuildDate>/)
-assert.doesNotMatch(renderRss([{ ...special, createdAt: 'bad-date' }], CONTENT_SITES[0]), /Invalid Date|<pubDate>/)
-const bigFeed = renderRss(Array.from({ length: 501 }, (_, index) => ({ ...special, id: `long-${index}`, description: '&'.repeat(2000) })), CONTENT_SITES[0])
+assert.doesNotMatch(renderRss([{ ...special, createdAt: 'bad-date' }]), /Invalid Date|<pubDate>/)
+const bigFeed = renderRss(Array.from({ length: 501 }, (_, index) => ({ ...special, id: `long-${index}`, description: '&'.repeat(2000) })))
 assert.equal((bigFeed.match(/<item>/g) ?? []).length, 500)
 assert.ok(Buffer.byteLength(bigFeed) < 4_500_000, 'Description excerpts must keep the 500-item feed within the response limit')
 assert.match(bigFeed, /…<\/description>/)
@@ -136,4 +136,4 @@ const routes = JSON.parse(await readFile('vercel.json', 'utf8')).rewrites
 const rssRoute = routes.findIndex((rule) => rule.source === '/rss.xml' && rule.destination === '/api/rss')
 assert.ok(rssRoute >= 0 && rssRoute < routes.findIndex((rule) => rule.source === '/(.*)'))
 await assert.rejects(readFile('public/rss.xml'), { code: 'ENOENT' })
-console.log('RSS verified: latest 500, search-blocked inclusion, cursor pagination, live refresh, 3 domains, XML escaping, response size, GET/HEAD and errors.')
+console.log('RSS verified: latest 500, search-blocked inclusion, cursor pagination, live refresh, fixed news domain, XML escaping, response size, GET/HEAD and errors.')

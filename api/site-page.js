@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { getRequestContentSite } from '../server/content-site.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -14,9 +13,8 @@ export default async function handler(req, res) {
   if (requestedRoute !== 'home' && requestedRoute !== 'lawyers') {
     return res.status(404).end('Not Found')
   }
-  const site = getRequestContentSite(req)
   const apiDir = path.dirname(fileURLToPath(import.meta.url))
-  const relativeFile = path.join('dist', 'prerender', site.id, `${requestedRoute}.html`)
+  const relativeFile = path.join('dist', 'prerender', `${requestedRoute}.html`)
   try {
     const html = await readFile(path.join(process.cwd(), relativeFile), 'utf8')
       .catch(() => readFile(path.join(apiDir, '..', relativeFile), 'utf8'))
