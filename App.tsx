@@ -41,7 +41,6 @@ import './App.css'
 
 type PageRoute = 'home' | 'lawyers' | 'companies' | 'admin'
 type AuthViewMode = 'login' | 'signup'
-type ConsultationYesNo = '' | 'yes' | 'no'
 type VisitSource = '' | 'naver' | 'google'
 type GoogleTag = (...args: unknown[]) => void
 
@@ -1240,7 +1239,6 @@ function App() {
   const companyDetailStackedRef = useRef(false)
   const shouldScrollToQuickFormRef = useRef(false)
   const adminEnrollmentInProgressRef = useRef(false)
-  const ineligibleIncidentBlockInProgressRef = useRef(false)
 
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authMode, setAuthMode] = useState<AuthViewMode>('login')
@@ -1286,8 +1284,6 @@ function App() {
   const [consultationNameInput, setConsultationNameInput] = useState('')
   const [consultationPhoneInput, setConsultationPhoneInput] = useState('')
   const [consultationDetailsInput, setConsultationDetailsInput] = useState('')
-  const [consultationAfter2025Input, setConsultationAfter2025Input] = useState<ConsultationYesNo>('')
-  const [consultationAfter2025Locked, setConsultationAfter2025Locked] = useState(false)
   const [consultationPrivacyAgreed, setConsultationPrivacyAgreed] = useState(false)
   const [consultationBusy, setConsultationBusy] = useState(false)
   const [consultationNotice, setConsultationNotice] = useState('')
@@ -1493,8 +1489,7 @@ function App() {
     () => getShiftedHeroDeckCards(heroDeckShuffleIndex),
     [heroDeckShuffleIndex],
   )
-  const consultationSubmitDisabled =
-    consultationBusy || consultationAfter2025Input === 'no' || !consultationPrivacyAgreed
+  const consultationSubmitDisabled = consultationBusy || !consultationPrivacyAgreed
 
   const handleHeroDeckShuffle = () => {
     setHeroDeckShuffleIndex((currentIndex) => currentIndex + 1)
@@ -2434,75 +2429,6 @@ function App() {
     setConsultationPhoneInput(onlyDigits)
   }
 
-  const blockConsultationIpForIneligibleIncident = async () => {
-    if (ineligibleIncidentBlockInProgressRef.current) {
-      return
-    }
-
-    ineligibleIncidentBlockInProgressRef.current = true
-    const endpoint = CONSULTATION_API_URL || '/api/consultation'
-    const queryString = window.location.search || ''
-    const referrer = document.referrer || ''
-    const userAgent = navigator.userAgent
-    const visitSource = detectVisitSource({
-      landingToken,
-      queryString,
-      referrer,
-      userAgent,
-    })
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'block-ineligible-incident',
-          incidentAfter2025: 'no',
-          source: isNaverPowerlinkVisit ? 'naver-powerlink' : 'website-quick-form',
-          pagePath: getRoutePath(route),
-          landingPath,
-          landingToken,
-          queryString,
-          referrer,
-          userAgent,
-          visitSource,
-        }),
-      })
-
-      const responseBody = (await response.json().catch(() => null)) as
-        | { ok?: boolean; message?: string }
-        | null
-
-      if (!response.ok || !responseBody?.ok) {
-        throw new Error(responseBody?.message ?? 'IP 차단 처리에 실패했습니다.')
-      }
-    } catch (error) {
-      console.error(error)
-    } finally {
-      ineligibleIncidentBlockInProgressRef.current = false
-    }
-  }
-
-  const handleConsultationAfter2025Change = (value: Exclude<ConsultationYesNo, ''>) => {
-    if (consultationAfter2025Locked) {
-      return
-    }
-
-    setConsultationAfter2025Input(value)
-    setConsultationNotice('')
-
-    if (value === 'no') {
-      setConsultationAfter2025Locked(true)
-      setConsultationError('2025년 이후 사건만 신청할 수 있습니다.')
-      void blockConsultationIpForIneligibleIncident()
-      return
-    }
-
-    setConsultationError('')
-  }
-
   const handleConsultationSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setConsultationError('')
@@ -2511,13 +2437,6 @@ function App() {
     const name = consultationNameInput.trim().replace(/\s+/g, '')
     const phone = consultationPhoneInput.trim().replace(/[^0-9]/g, '')
     const details = consultationDetailsInput.trim()
-
-    if (consultationAfter2025Input !== 'yes') {
-      const message = '2025년 이후 사건만 신청할 수 있습니다.'
-      setConsultationError(message)
-      window.alert(message)
-      return
-    }
 
     if (!name || !phone || !details) {
       window.alert('이름, 연락처, 피해 내용을 모두 입력해주세요.')
@@ -2568,7 +2487,6 @@ function App() {
           name,
           phone,
           details,
-          incidentAfter2025: consultationAfter2025Input,
           source: isNaverPowerlinkVisit ? 'naver-powerlink' : 'website-quick-form',
           pagePath: getRoutePath(route),
           landingPath,
@@ -2592,8 +2510,6 @@ function App() {
       setConsultationNameInput('')
       setConsultationPhoneInput('')
       setConsultationDetailsInput('')
-      setConsultationAfter2025Input('')
-      setConsultationAfter2025Locked(false)
       setConsultationPrivacyAgreed(false)
       sendGoogleAdsConsultationConversion()
       window.alert('신청이 완료되었습니다.')
@@ -2604,43 +2520,6 @@ function App() {
       setConsultationBusy(false)
     }
   }
-
-  const renderConsultationChoiceFields = (namePrefix: string) => (
-    <>
-      <div
-        className={`consultation-choice-field ${
-          consultationAfter2025Locked ? 'consultation-choice-field-disabled' : ''
-        }`}
-        role="radiogroup"
-        aria-labelledby={`${namePrefix}-incident-after-2025-title`}
-      >
-        <p className="consultation-choice-title" id={`${namePrefix}-incident-after-2025-title`}>
-          25년 이후 사건입니까
-        </p>
-        <div className="consultation-choice-options">
-          {(['yes', 'no'] as const).map((value) => (
-            <label
-              className={`consultation-choice-option ${
-                consultationBusy || consultationAfter2025Locked ? 'consultation-choice-option-disabled' : ''
-              }`}
-              key={`${namePrefix}-incident-after-2025-${value}`}
-            >
-              <input
-                type="radio"
-                name={`${namePrefix}-incident-after-2025`}
-                value={value}
-                checked={consultationAfter2025Input === value}
-                onChange={() => handleConsultationAfter2025Change(value)}
-                required
-                disabled={consultationBusy || consultationAfter2025Locked}
-              />
-              <span>{value === 'yes' ? '예' : '아니요'}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-    </>
-  )
 
   const renderConsultationPrivacyAgreement = (namePrefix: string) => (
     <label className="consultation-privacy-agreement" htmlFor={`${namePrefix}-privacy-agreement`}>
@@ -3805,7 +3684,6 @@ function App() {
                     required
                     disabled={consultationBusy}
                   />
-                  {renderConsultationChoiceFields('main-consultation')}
                   <textarea
                     rows={4}
                     value={consultationDetailsInput}
@@ -4100,7 +3978,6 @@ function App() {
                 required
                 disabled={consultationBusy}
               />
-              {renderConsultationChoiceFields('bottom-consultation')}
               <textarea
                 rows={1}
                 value={consultationDetailsInput}
