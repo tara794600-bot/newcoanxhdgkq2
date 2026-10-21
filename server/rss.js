@@ -1,5 +1,6 @@
 import { CONTENT_SITE, resolveCompanyContent } from '../shared/company-content.js'
 import { SEO_META_BY_ROUTE } from '../shared/page-meta.js'
+import { descriptionToPlainText } from '../shared/rich-text.js'
 
 export const RSS_ITEM_LIMIT = 500
 const DESCRIPTION_MAX_LENGTH = 600
@@ -69,7 +70,7 @@ export const renderRss = (companyCases, buildDate = new Date()) => {
       <title>${escapeXml(content.name)}</title>
       <link>${escapeXml(url)}</link>
       <guid isPermaLink="true">${escapeXml(url)}</guid>
-      <description>${escapeXml(getDescriptionExcerpt(content.description))}</description>
+      <description>${escapeXml(getDescriptionExcerpt(descriptionToPlainText(content.description)))}</description>
       <category>${escapeXml(companyCase.service)}</category>${pubDate ? `\n      <pubDate>${pubDate}</pubDate>` : ''}
     </item>`
   })

@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CONTENT_SITE, matchesCompanySearch, resolveCompanyContent } from '../shared/company-content.js'
+import { descriptionToPlainText, isRichDescription, sanitizeRichHtml } from '../shared/rich-text.js'
 
 const SITE_BASE_URL = CONTENT_SITE.url
 const DESCRIPTION_MAX_LENGTH = 155
@@ -100,7 +101,7 @@ const normalizeSeoText = (value) =>
     .trim()
 
 const getDescriptionExcerpt = (description, fallback) => {
-  const source = normalizeSeoText(description) || normalizeSeoText(fallback)
+  const source = normalizeSeoText(descriptionToPlainText(description)) || normalizeSeoText(fallback)
 
   if (source.length <= DESCRIPTION_MAX_LENGTH) {
     return source
@@ -149,6 +150,10 @@ const replaceOrInsertBootstrapData = (html, data) => {
 }
 
 const renderDescriptionParagraphs = (description) => {
+  if (isRichDescription(description)) {
+    return `<div class="company-detail-description se-viewer">${sanitizeRichHtml(description)}</div>`
+  }
+
   const paragraphs = String(description)
     .split(/\r?\n+/)
     .map((paragraph) => paragraph.trim())

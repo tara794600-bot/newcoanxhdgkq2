@@ -104,13 +104,20 @@ service cloud.firestore {
           'description',
           'image',
           'imageUrl',
+          'isPublic',
+          'isSearchBlocked',
           'createdAt',
+          'updatedAt',
           'createdBy'
         ])
         && hasText(data, 'name', 1, 80)
         && hasText(data, 'service', 1, 80)
-        && hasText(data, 'description', 1, 2000)
+        // 글쓰기 에디터 본문은 HTML로 저장되므로 길이 제한을 넉넉히 둔다.
+        && hasText(data, 'description', 1, 150000)
         && hasImageField(data)
+        && (!('isPublic' in data) || data.isPublic is bool)
+        && (!('isSearchBlocked' in data) || data.isSearchBlocked is bool)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
         && data.createdAt is timestamp
         && data.createdBy is string;
     }
