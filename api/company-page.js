@@ -22,6 +22,13 @@ const COMPANY_SEARCH_MAX_LENGTH = 120
 const PAGINATION_CRAWL_SEGMENTS = 8
 const COMPANY_PHONE_NUMBER = '1551-7203'
 const COMPANY_PHONE_TEL = `tel:${COMPANY_PHONE_NUMBER.replace(/[^0-9+]/g, '')}`
+// Posts written before this domain moved to its own Firebase project (2026-10-16)
+// stay in the previous project and are still linked from search results. Its
+// companyCases are publicly readable with the web API key it ships to browsers.
+const LEGACY_COMPANY_CASES_URL =
+  'https://firestore.googleapis.com/v1/projects/newcoanxhdgkq/databases/(default)/documents/companyCases'
+const LEGACY_FIREBASE_API_KEY = 'AIzaSyBFn70MUVeEnfUxwrNVdc1o8Q-xP3g6OkM'
+const LEGACY_REQUEST_TIMEOUT_MS = 5000
 
 let companyCasesCache = null
 let companyCasesCacheVersion = ''
@@ -402,12 +409,43 @@ const getCachedCompanyCases = async (collectionRef) => {
   return companyCasesRequest
 }
 
+const fromFirestoreRestValue = (value = {}) => {
+  if ('stringValue' in value) return value.stringValue
+  if ('booleanValue' in value) return value.booleanValue
+  if ('timestampValue' in value) return value.timestampValue
+  return undefined
+}
+
+const getLegacyCompanyCase = async (id) => {
+  const response = await fetch(
+    `${LEGACY_COMPANY_CASES_URL}/${encodeURIComponent(id)}?key=${LEGACY_FIREBASE_API_KEY}`,
+    { signal: AbortSignal.timeout(LEGACY_REQUEST_TIMEOUT_MS) },
+  )
+
+  // Missing, invalid or no longer shared posts are an ordinary not-found page.
+  if ([400, 403, 404].includes(response.status)) {
+    return null
+  }
+
+  // Other failures surface as 503 so crawlers retry instead of dropping the page.
+  if (!response.ok) {
+    throw new Error(`이전 Firebase 게시글 조회 실패 (${response.status})`)
+  }
+
+  const { fields = {} } = await response.json()
+  const data = Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key, fromFirestoreRestValue(value)]),
+  )
+
+  return mapCompanyCase({ id, data: () => data })
+}
+
 const getCompanyCase = async (id) => {
   const app = getFirebaseApp()
   const snapshot = await getFirestore(app).collection('companyCases').doc(id).get()
 
   if (!snapshot.exists) {
-    return null
+    return getLegacyCompanyCase(id)
   }
 
   return mapCompanyCase(snapshot)

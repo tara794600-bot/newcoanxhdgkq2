@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { mock } from 'node:test'
+import { deleteApp, initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
 import { CONTENT_SITE, matchesCompanySearch, resolveCompanyContent } from '../shared/company-content.js'
-import { buildCompaniesPageHtml, buildCompanyCasePageHtml, buildNotFoundPageHtml } from '../api/company-page.js'
+import companyHandler, { buildCompaniesPageHtml, buildCompanyCasePageHtml, buildNotFoundPageHtml } from '../api/company-page.js'
 import { renderSitemap } from '../api/sitemap.js'
 
 const html = await readFile(new URL('../dist/app-shell.html', import.meta.url), 'utf8')
@@ -70,4 +73,53 @@ assert.equal((symbolPage.match(/<title>/g) ?? []).length, 1)
 
 assert.deepEqual(resolveCompanyContent({}), { name: '', description: '' })
 assert.equal(original.name, '샘플 업체')
+
+// Posts missing here are read from the previous Firebase project, which still
+// holds the pages search engines indexed before this domain was separated.
+const response = () => ({
+  headers: {}, statusCode: 0, body: '',
+  setHeader(name, value) { this.headers[name] = value },
+  status(code) { this.statusCode = code; return this },
+  send(body) { this.body = body; return this },
+  end(body = '') { this.body = body; return this },
+})
+const legacyApp = initializeApp({ projectId: 'legacy-post-verification' })
+const legacyFields = {
+  name: { stringValue: original.name },
+  service: { stringValue: original.service },
+  description: { stringValue: original.description },
+  image: { stringValue: 'https://firebasestorage.googleapis.com/v0/b/newcoanxhdgkq.firebasestorage.app/o/a.png' },
+  isPublic: { booleanValue: true },
+  isSearchBlocked: { booleanValue: true },
+  createdAt: { timestampValue: '2026-09-30T03:38:50.330Z' },
+}
+mock.method(getFirestore(legacyApp), 'collection', () => ({ doc: () => ({ get: async () => ({ exists: false }) }) }))
+mock.method(globalThis, 'fetch', async (url) => {
+  assert.ok(String(url).startsWith('https://firestore.googleapis.com/v1/projects/newcoanxhdgkq/databases/(default)/documents/companyCases/'))
+  const id = new URL(url).pathname.split('/').pop()
+  return id === 'legacy-post'
+    ? new Response(JSON.stringify({ fields: legacyFields }), { status: 200 })
+    : new Response('{}', { status: id === 'missing-post' ? 404 : 500 })
+})
+mock.method(console, 'error', () => {})
+try {
+  const legacy = response()
+  await companyHandler({ method: 'GET', url: '/api/company-page?id=legacy-post', headers: {} }, legacy)
+  assert.equal(legacy.statusCode, 200)
+  assert.ok(legacy.body.includes(`<h1>${expected.name}</h1>`))
+  assert.ok(legacy.body.includes(`rel="canonical" href="${CONTENT_SITE.url}/companies/legacy-post"`))
+  assert.equal(readBootstrap(legacy.body).item.isSearchBlocked, true)
+  assert.equal(readArticle(legacy.body).datePublished, '2026-09-30T03:38:50.330Z')
+
+  const missing = response()
+  await companyHandler({ method: 'GET', url: '/api/company-page?id=missing-post', headers: {} }, missing)
+  assert.equal(missing.statusCode, 404)
+
+  const unavailable = response()
+  await companyHandler({ method: 'GET', url: '/api/company-page?id=broken-post', headers: {} }, unavailable)
+  assert.equal(unavailable.statusCode, 503)
+} finally {
+  mock.restoreAll()
+  await deleteApp(legacyApp)
+}
 console.log('News site content verification passed')
