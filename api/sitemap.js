@@ -1,6 +1,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { CONTENT_SITE } from '../shared/company-content.js'
+import { assignCompanySlugs, getCompanyCasePath } from '../shared/company-slug.js'
 
 const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -73,6 +74,13 @@ const toDateString = (value) => {
 const getCompanyCaseUrls = async () => {
   const app = getFirebaseApp()
   const snapshot = await getFirestore(app).collection('companyCases').get()
+  // Same slug rule as the detail pages (every named post takes part).
+  const slugs = assignCompanySlugs(
+    snapshot.docs.map((snapshotDoc) => {
+      const data = snapshotDoc.data() ?? {}
+      return { id: snapshotDoc.id, name: toTrimmedString(data.name), createdAt: data.createdAt }
+    }).filter((entry) => entry.name),
+  )
 
   return snapshot.docs
     .map((snapshotDoc) => {
@@ -86,12 +94,13 @@ const getCompanyCaseUrls = async () => {
       }
 
       return {
-        loc: `${CONTENT_SITE.url}/companies/${encodeURIComponent(snapshotDoc.id)}`,
+        loc: `${CONTENT_SITE.url}${getCompanyCasePath({ id: snapshotDoc.id, slug: slugs.get(snapshotDoc.id) })}`,
         lastmod: toDateString(data.updatedAt ?? data.createdAt),
       }
     })
     .filter(Boolean)
-    .sort((a, b) => a.loc.localeCompare(b.loc))
+    // Newest first, so recently published posts are read first.
+    .sort((a, b) => b.lastmod.localeCompare(a.lastmod) || a.loc.localeCompare(b.loc))
 }
 
 const renderUrl = ({ loc, lastmod }) => `  <url>
@@ -100,10 +109,8 @@ const renderUrl = ({ loc, lastmod }) => `  <url>
 
 export const renderSitemap = (companyUrls) => {
   const SITE_BASE_URL = CONTENT_SITE.url
-  const latestCompanyLastmod = companyUrls.reduce(
-    (latest, item) => (item.lastmod && item.lastmod > latest ? item.lastmod : latest),
-    '',
-  )
+  // The /companies board is noindex (detail pages should rank instead), so it is
+  // not listed; crawlers still reach it through the site navigation.
   const urls = [
     {
       loc: `${SITE_BASE_URL}/`,
@@ -112,10 +119,6 @@ export const renderSitemap = (companyUrls) => {
     {
       loc: `${SITE_BASE_URL}/lawyers`,
       lastmod: '2026-05-08',
-    },
-    {
-      loc: `${SITE_BASE_URL}/companies`,
-      lastmod: latestCompanyLastmod,
     },
     ...companyUrls,
   ]

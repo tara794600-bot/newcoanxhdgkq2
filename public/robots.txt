@@ -1,19 +1,22 @@
-일반 검색 엔진
+# 일반 검색 엔진 (네이버 Yeti, Google 포함)
 User-agent: *
 Allow: /
 Disallow: /api/
-ChatGPT 검색 결과용
+
+# ChatGPT 검색 결과용
 User-agent: OAI-SearchBot
 Allow: /
 Disallow: /api/
-ChatGPT 사용자의 웹페이지 탐색용
+
+# ChatGPT 사용자의 웹페이지 탐색용
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /api/
-OpenAI 모델 학습용 크롤러
+
+# OpenAI 모델 학습용 크롤러
 User-agent: GPTBot
 Allow: /
 Disallow: /api/
-사이트맵
-Sitemap: https://www.naranfintech.com/sitemap.xml
-이걸 robot.txt 에 넣어줘
+
+# 사이트맵
+Sitemap: https://www.naranfintechnews.co.kr/sitemap.xml

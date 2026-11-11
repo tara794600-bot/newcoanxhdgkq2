@@ -14,6 +14,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -41,6 +42,8 @@ import { auth, db, isFirebaseConfigured, storage } from './firebase'
 import { CompanyDescription } from './components/CompanyDescription'
 import { CompanyPostEditor } from './components/CompanyPostEditor'
 import { CONTENT_SITE, resolveCompanyContent } from '../shared/company-content.js'
+import { assignCompanySlugs, findCompanyBySlug, getCompanyCasePath } from '../shared/company-slug.js'
+import { COMPANY_DETAIL_ROBOTS, COMPANY_LIST_ROBOTS, getCompanyDetailSeo } from '../shared/company-seo.js'
 import { descriptionToPlainText, getRichImageSources } from '../shared/rich-text.js'
 import { DEFAULT_SEO_KEYWORDS, SEO_META_BY_ROUTE } from '../shared/page-meta.js'
 import './App.css'
@@ -89,12 +92,24 @@ type CompanyCase = {
   image: string
   isPublic: boolean
   isSearchBlocked: boolean
+  // Keyword URL segment (/companies/{slug}); missing for posts only in the old project.
+  slug?: string
+  // Name as typed by the admin, before the "| 유형 사례 정리" display suffix.
+  sourceName?: string
+}
+
+type RelatedCompanyCase = {
+  id: string
+  slug: string
+  name: string
+  service: string
 }
 
 type CompanyPageBootstrap =
   | {
       kind: 'detail'
       item: CompanyCase
+      related?: RelatedCompanyCase[]
     }
   | {
       kind: 'list'
@@ -311,46 +326,15 @@ const toAbsoluteSiteUrl = (path: string): string => {
   }
 }
 
-const SEO_DESCRIPTION_MAX_LENGTH = 155
-
-const normalizeSeoText = (value: string): string =>
-  value
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/[\r\n\t]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-const getSeoDescriptionExcerpt = (description: string, fallback: string): string => {
-  const normalizedDescription = normalizeSeoText(description)
-  const normalizedFallback = normalizeSeoText(fallback)
-  const source = normalizedDescription || normalizedFallback
-
-  if (source.length <= SEO_DESCRIPTION_MAX_LENGTH) {
-    return source
-  }
-
-  const clipped = source.slice(0, SEO_DESCRIPTION_MAX_LENGTH).trim()
-  const lastSpaceIndex = clipped.lastIndexOf(' ')
-  const readableClip =
-    lastSpaceIndex >= Math.floor(SEO_DESCRIPTION_MAX_LENGTH * 0.6)
-      ? clipped.slice(0, lastSpaceIndex).trim()
-      : clipped
-
-  return `${readableClip}...`
-}
-
+// Must match the server render (api/company-page.js), which uses the same helper.
 const getCompanyCaseSeoMeta = (companyCase: CompanyCase): SeoMeta => {
-  const title = `${companyCase.name} | 사기업체 게시판 | 법무법인 나란`
-  const description = getSeoDescriptionExcerpt(
-    descriptionToPlainText(companyCase.description),
-    `${companyCase.name} 관련 ${companyCase.service} 피해 사례와 피해회복 상담 정보를 확인하세요.`,
-  )
+  const { title, description, keywords } = getCompanyDetailSeo(companyCase)
 
   return {
     title,
     description,
-    keywords: `${companyCase.name}, ${companyCase.service}, ${companyCase.name} 사기, 사기업체 게시판, 사기 피해 사례, 피해회복 상담, ${DEFAULT_SEO_KEYWORDS}`,
-    path: getCompanyCasePath(companyCase.id),
+    keywords,
+    path: getCompanyCasePath(companyCase),
     image: companyCase.image,
   }
 }
@@ -546,7 +530,7 @@ const getRouteStructuredData = (
             '@type': 'ListItem',
             position: (companyPage - 1) * COMPANY_CASES_PER_PAGE + index + 1,
             name: item.name,
-            url: toAbsoluteSiteUrl(getCompanyCasePath(item.id)),
+            url: toAbsoluteSiteUrl(getCompanyCasePath(item)),
           })),
         },
       },
@@ -600,8 +584,6 @@ const getCompanyCaseIdFromPath = (pathname: string): string => {
     return rawId.trim()
   }
 }
-
-const getCompanyCasePath = (id: string): string => `${ROUTE_PATHS.companies}/${encodeURIComponent(id)}`
 
 const getCompaniesPagePath = (page: number, searchQuery = ''): string => {
   const params = new URLSearchParams()
@@ -1610,10 +1592,19 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
   }, [keywordCompanyCases, landingPowerlinkKeyword])
   const shouldShowKeywordCompanySection =
     Boolean(landingPowerlinkKeyword) && (!companyCasesLoaded || keywordCompanyCases.length > 0)
+  // The path segment is a keyword slug; old random-id links are matched by id.
   const selectedCompanyCase = useMemo(
-    () => companyCases.find((item) => item.id === selectedCompanyCaseId) ?? null,
+    () =>
+      companyCases.find((item) => item.slug === selectedCompanyCaseId) ??
+      companyCases.find((item) => item.id === selectedCompanyCaseId) ??
+      null,
     [companyCases, selectedCompanyCaseId],
   )
+  const relatedCompanyCases =
+    INITIAL_COMPANY_PAGE_DATA?.kind === 'detail' &&
+    selectedCompanyCase?.id === INITIAL_COMPANY_PAGE_DATA.item.id
+      ? (INITIAL_COMPANY_PAGE_DATA.related ?? [])
+      : []
 
   useEffect(() => {
     setAdminCompanyCurrentPage(1)
@@ -1657,9 +1648,9 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
       'robots',
       route === 'admin'
         ? 'noindex,nofollow'
-        : route === 'companies' && appliedCompanySearchTerm
-          ? 'noindex,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
-          : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
+        : route === 'companies' && !selectedCompanyCaseId
+          ? COMPANY_LIST_ROBOTS
+          : COMPANY_DETAIL_ROBOTS,
     )
     upsertMetaTag('property', 'og:type', isCompanyCaseDetail ? 'article' : 'website')
     upsertMetaTag('property', 'og:site_name', SEARCH_RESULT_SITE_NAME)
@@ -1690,6 +1681,7 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
     landingPowerlinkKeyword,
     route,
     selectedCompanyCase,
+    selectedCompanyCaseId,
   ])
 
   useEffect(() => {
@@ -2271,7 +2263,8 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
     if (route === 'companies' && selectedCompanyCaseId) {
       if (
         INITIAL_COMPANY_PAGE_DATA?.kind === 'detail' &&
-        INITIAL_COMPANY_PAGE_DATA.item.id === selectedCompanyCaseId
+        (INITIAL_COMPANY_PAGE_DATA.item.id === selectedCompanyCaseId ||
+          INITIAL_COMPANY_PAGE_DATA.item.slug === selectedCompanyCaseId)
       ) {
         setCompanyCasesLoaded(true)
         return
@@ -2280,13 +2273,30 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
       let active = true
       setCompanyCasesLoaded(false)
 
-      void getDoc(doc(db, 'companyCases', selectedCompanyCaseId))
-        .then((snapshot) => {
+      // Without server data (e.g. local dev) the segment may be a keyword slug,
+      // which needs every post name to resolve with the shared slug rule.
+      const loadSelectedCompanyCase = async () => {
+        const snapshots = await getDocs(collection(db, 'companyCases'))
+        const entries = snapshots.docs
+          .map((snapshotDoc) => ({
+            id: snapshotDoc.id,
+            name: toTrimmedString(snapshotDoc.data().name),
+            createdAt: snapshotDoc.data().createdAt,
+          }))
+          .filter((entry) => entry.name)
+        const slugs = assignCompanySlugs(entries)
+        const match = findCompanyBySlug(entries, slugs, selectedCompanyCaseId)
+        const snapshot = snapshots.docs.find((snapshotDoc) => snapshotDoc.id === (match?.id ?? selectedCompanyCaseId))
+        return { snapshot, slug: match?.slug }
+      }
+
+      void loadSelectedCompanyCase()
+        .then(({ snapshot, slug }) => {
           if (!active) {
             return
           }
 
-          if (!snapshot.exists()) {
+          if (!snapshot) {
             setCompanyCases([])
             setCompanyCasesLoaded(true)
             return
@@ -2302,7 +2312,19 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
 
           setCompanyCases(
             name && service && description
-              ? [{ id: snapshot.id, name, service, description, image, isPublic, isSearchBlocked }]
+              ? [
+                  {
+                    id: snapshot.id,
+                    name,
+                    service,
+                    description,
+                    image,
+                    isPublic,
+                    isSearchBlocked,
+                    slug,
+                    sourceName: data.sourceName,
+                  },
+                ]
               : [],
           )
           setCompanyCasesLoaded(true)
@@ -2336,6 +2358,16 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
     const unsubscribe = onSnapshot(
       companyCasesQuery,
       (snapshot) => {
+        // Same slug rule as the server: every named post takes part.
+        const slugs = assignCompanySlugs(
+          snapshot.docs
+            .map((snapshotDoc) => ({
+              id: snapshotDoc.id,
+              name: toTrimmedString(snapshotDoc.data().name),
+              createdAt: snapshotDoc.data().createdAt,
+            }))
+            .filter((entry) => entry.name),
+        )
         const mappedCases = snapshot.docs
           .map((snapshotDoc) => {
             const data = snapshotDoc.data()
@@ -2356,6 +2388,7 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
               image,
               isPublic: data.isPublic !== false,
               isSearchBlocked: data.isSearchBlocked === true,
+              slug: slugs.get(snapshotDoc.id),
             }
           })
           .filter((item) => item !== null)
@@ -4193,6 +4226,22 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
                       </div>
                     </article>
 
+                    {relatedCompanyCases.length > 0 ? (
+                      <section className="company-related" aria-labelledby="company-related-title">
+                        <h2 id="company-related-title">함께 확인하면 좋은 사칭 사례</h2>
+                        <ul className="company-related-list">
+                          {relatedCompanyCases.map((item) => (
+                            <li key={item.id}>
+                              <a className="company-related-link" href={getCompanyCasePath(item)}>
+                                <strong>{item.name}</strong>
+                                <span>{item.service}</span>
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : null}
+
                     <section className="company-detail-kakao-section" aria-label="전화 및 카카오톡 상담 배너">
                       <a
                         className="company-detail-kakao-banner"
@@ -4258,7 +4307,7 @@ function App({ initialPathname = '/' }: { initialPathname?: string } = {}) {
                         ? paginatedCompanyCases.map((item) => (
                             <a
                               className="company-card company-card-filled company-card-link"
-                              href={getCompanyCasePath(item.id)}
+                              href={getCompanyCasePath(item)}
                               key={item.id}
                             >
                               <div className="company-card-thumb-wrap">

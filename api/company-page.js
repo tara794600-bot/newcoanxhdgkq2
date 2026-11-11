@@ -5,10 +5,17 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CONTENT_SITE, matchesCompanySearch, resolveCompanyContent } from '../shared/company-content.js'
-import { descriptionToPlainText, isRichDescription, sanitizeRichHtml } from '../shared/rich-text.js'
+import {
+  assignCompanySlugs,
+  findCompanyBySlug,
+  getCompanyCasePath,
+  toCompanyTimeValue,
+} from '../shared/company-slug.js'
+import { COMPANY_DETAIL_ROBOTS, COMPANY_LIST_ROBOTS, getCompanyDetailSeo } from '../shared/company-seo.js'
+import { isRichDescription, sanitizeRichHtml } from '../shared/rich-text.js'
 
 const SITE_BASE_URL = CONTENT_SITE.url
-const DESCRIPTION_MAX_LENGTH = 155
+const RELATED_COMPANY_CASE_LIMIT = 10
 const SEARCH_RESULT_SITE_NAME = '법무법인나란'
 const SEARCH_RESULT_SECTION_NAME = '핀테크전문'
 const COMPANIES_PAGE_PATH = '/companies'
@@ -33,6 +40,9 @@ const LEGACY_REQUEST_TIMEOUT_MS = 5000
 let companyCasesCache = null
 let companyCasesCacheVersion = ''
 let companyCasesRequest = null
+let companyIndexCache = null
+let companyIndexCacheVersion = ''
+let companyIndexRequest = null
 
 const toTrimmedString = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -98,30 +108,6 @@ const getIndexHtml = async () => {
   }
 
   throw lastError ?? new Error('index.html 파일을 찾을 수 없습니다.')
-}
-
-const normalizeSeoText = (value) =>
-  toTrimmedString(value)
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/[\r\n\t]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-const getDescriptionExcerpt = (description, fallback) => {
-  const source = normalizeSeoText(descriptionToPlainText(description)) || normalizeSeoText(fallback)
-
-  if (source.length <= DESCRIPTION_MAX_LENGTH) {
-    return source
-  }
-
-  const clipped = source.slice(0, DESCRIPTION_MAX_LENGTH).trim()
-  const lastSpaceIndex = clipped.lastIndexOf(' ')
-  const readableClip =
-    lastSpaceIndex >= Math.floor(DESCRIPTION_MAX_LENGTH * 0.6)
-      ? clipped.slice(0, lastSpaceIndex).trim()
-      : clipped
-
-  return `${readableClip}...`
 }
 
 const escapeHtml = (value) =>
@@ -384,10 +370,29 @@ const getCompanyCasesVersion = async (collectionRef) => {
   return `${countSnapshot.data().count}:${latestUpdate?.id ?? ''}:${latestUpdatedAt}`
 }
 
-const getCachedCompanyCases = async (collectionRef) => {
-  // Cache originals only; apply the news introduction after reading this cache.
-  const currentVersion = await getCompanyCasesVersion(collectionRef)
+// Slugs are assigned over every named post (any visibility) so that hiding or
+// showing a post never moves another post's URL. The client uses the same rule.
+const INDEX_FIELDS = ['name', 'service', 'createdAt', 'isPublic', 'isSearchBlocked']
 
+const buildCompanyIndex = (docs) => {
+  const entries = docs
+    .map((snapshot) => {
+      const data = snapshot.data() ?? {}
+      return {
+        id: snapshot.id,
+        name: toTrimmedString(data.name),
+        service: toTrimmedString(data.service),
+        createdAt: data.createdAt,
+        isListed: data.isPublic !== false && data.isSearchBlocked !== true,
+      }
+    })
+    .filter((entry) => entry.name)
+
+  return { entries, slugs: assignCompanySlugs(entries) }
+}
+
+const getCachedCompanyCases = async (collectionRef, currentVersion) => {
+  // Cache originals only; apply the news introduction after reading this cache.
   if (companyCasesCache && currentVersion === companyCasesCacheVersion) {
     return companyCasesCache
   }
@@ -395,11 +400,18 @@ const getCachedCompanyCases = async (collectionRef) => {
   if (!companyCasesRequest) {
     companyCasesRequest = collectionRef
       .get()
-      .then((snapshot) => snapshot.docs.map(mapCompanyCase).filter(Boolean))
-      .then((items) => {
-        companyCasesCache = items
+      .then((snapshot) => {
+        const index = buildCompanyIndex(snapshot.docs)
+        const items = snapshot.docs
+          .map(mapCompanyCase)
+          .filter(Boolean)
+          .map((item) => ({ ...item, slug: index.slugs.get(item.id) ?? item.id }))
+        return { index, items }
+      })
+      .then((cache) => {
+        companyCasesCache = cache
         companyCasesCacheVersion = currentVersion
-        return items
+        return cache
       })
       .finally(() => {
         companyCasesRequest = null
@@ -407,6 +419,61 @@ const getCachedCompanyCases = async (collectionRef) => {
   }
 
   return companyCasesRequest
+}
+
+// Detail pages only need names to resolve a slug, so they avoid loading every post body.
+const getCompanyIndex = async (collectionRef, currentVersion) => {
+  if (companyCasesCache && currentVersion === companyCasesCacheVersion) {
+    return companyCasesCache.index
+  }
+
+  if (companyIndexCache && currentVersion === companyIndexCacheVersion) {
+    return companyIndexCache
+  }
+
+  if (!companyIndexRequest) {
+    companyIndexRequest = collectionRef
+      .select(...INDEX_FIELDS)
+      .get()
+      .then((snapshot) => {
+        companyIndexCache = buildCompanyIndex(snapshot.docs)
+        companyIndexCacheVersion = currentVersion
+        return companyIndexCache
+      })
+      .finally(() => {
+        companyIndexRequest = null
+      })
+  }
+
+  return companyIndexRequest
+}
+
+// Same-type posts first (often other names used by the same scheme), then the posts
+// published closest in time. Deterministic, so a page keeps the same links between crawls.
+const selectRelatedCompanyCases = (index, currentId) => {
+  const current = index.entries.find((entry) => entry.id === currentId)
+
+  if (!current) {
+    return []
+  }
+
+  const currentTime = toCompanyTimeValue(current.createdAt)
+
+  return index.entries
+    .filter((entry) => entry.id !== currentId && entry.isListed && entry.service)
+    .map((entry) => ({
+      entry,
+      sameService: entry.service === current.service ? 0 : 1,
+      distance: Math.abs(toCompanyTimeValue(entry.createdAt) - currentTime),
+    }))
+    .sort((a, b) => a.sameService - b.sameService || a.distance - b.distance || (a.entry.id < b.entry.id ? -1 : 1))
+    .slice(0, RELATED_COMPANY_CASE_LIMIT)
+    .map(({ entry }) => ({
+      id: entry.id,
+      slug: index.slugs.get(entry.id) ?? entry.id,
+      name: entry.name,
+      service: entry.service,
+    }))
 }
 
 const fromFirestoreRestValue = (value = {}) => {
@@ -440,21 +507,50 @@ const getLegacyCompanyCase = async (id) => {
   return mapCompanyCase({ id, data: () => data })
 }
 
-const getCompanyCase = async (id) => {
-  const app = getFirebaseApp()
-  const snapshot = await getFirestore(app).collection('companyCases').doc(id).get()
+const isPossibleDocumentId = (value) =>
+  value.length <= 1500 && !value.includes('/') && value !== '.' && value !== '..' && !/^__.*__$/.test(value)
 
-  if (!snapshot.exists) {
-    return getLegacyCompanyCase(id)
+// Resolves /companies/{segment}: a keyword slug, an old random-id URL (redirected to
+// its slug), or a post that only exists in the previous Firebase project.
+const getCompanyCase = async (segment) => {
+  const app = getFirebaseApp()
+  const collectionRef = getFirestore(app).collection('companyCases')
+  const version = await getCompanyCasesVersion(collectionRef)
+  const index = await getCompanyIndex(collectionRef, version)
+  const match = findCompanyBySlug(index.entries, index.slugs, segment)
+
+  if (match?.redirect) {
+    return { redirectTo: getCompanyCasePath(match) }
   }
 
-  return mapCompanyCase(snapshot)
+  if (match) {
+    const companyCase = mapCompanyCase(await collectionRef.doc(match.id).get())
+    return companyCase
+      ? { companyCase: { ...companyCase, slug: match.slug }, related: selectRelatedCompanyCases(index, match.id) }
+      : null
+  }
+
+  if (!isPossibleDocumentId(segment)) {
+    return null
+  }
+
+  const snapshot = await collectionRef.doc(segment).get()
+
+  if (snapshot.exists) {
+    // Exists without a name, so it has no slug; mapCompanyCase rejects it as incomplete.
+    const companyCase = mapCompanyCase(snapshot)
+    return companyCase ? { companyCase, related: [] } : null
+  }
+
+  const legacyCompanyCase = await getLegacyCompanyCase(segment)
+  return legacyCompanyCase ? { companyCase: legacyCompanyCase, related: [] } : null
 }
 
 const getCompaniesPage = async ({ page, searchQuery }) => {
   const app = getFirebaseApp()
   const collectionRef = getFirestore(app).collection('companyCases')
-  const allCompanyCases = await getCachedCompanyCases(collectionRef)
+  const version = await getCompanyCasesVersion(collectionRef)
+  const { items: allCompanyCases } = await getCachedCompanyCases(collectionRef, version)
   const publicItems = allCompanyCases.filter((item) => item.isPublic !== false && item.isSearchBlocked !== true)
   let matchedItems = publicItems
 
@@ -517,7 +613,7 @@ const renderCompaniesServerContent = (pageData, baseUrl) => {
     ? pageData.items
         .map(
           (item) => `<a class="company-card company-card-filled company-card-link" href="${escapeHtml(
-            `/companies/${encodeURIComponent(item.id)}`,
+            getCompanyCasePath(item),
           )}">
             <div class="company-card-thumb-wrap">
               <img src="${escapeHtml(toAbsoluteUrl(item.image, baseUrl) || `${baseUrl}/logo.png`)}" alt="${escapeHtml(
@@ -558,7 +654,25 @@ const renderCompaniesServerContent = (pageData, baseUrl) => {
   </div>`
 }
 
-const renderCompanyCaseServerContent = (companyCase, baseUrl) => {
+// Links between detail pages let crawlers reach each post from its neighbours instead
+// of only through the board, which is what the reference site does for every name.
+const renderRelatedCompanyCases = (related) =>
+  related.length
+    ? `<section class="company-related" aria-labelledby="company-related-title">
+            <h2 id="company-related-title">함께 확인하면 좋은 사칭 사례</h2>
+            <ul class="company-related-list">
+              ${related
+                .map(
+                  (item) => `<li><a class="company-related-link" href="${escapeHtml(getCompanyCasePath(item))}"><strong>${escapeHtml(
+                    item.name,
+                  )}</strong><span>${escapeHtml(item.service)}</span></a></li>`,
+                )
+                .join('\n              ')}
+            </ul>
+          </section>`
+    : ''
+
+const renderCompanyCaseServerContent = (companyCase, baseUrl, related = []) => {
   const imageUrl = toAbsoluteUrl(companyCase.image, baseUrl) || `${baseUrl}/logo.png`
 
   return `<div class="app-shell">
@@ -581,6 +695,7 @@ const renderCompanyCaseServerContent = (companyCase, baseUrl) => {
               </div>
             </div>
           </article>
+          ${renderRelatedCompanyCases(related)}
         </div>
       </section>
     </main>
@@ -624,14 +739,9 @@ export const buildCompaniesPageHtml = (html, pageData) => {
   let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(title)}</title>`)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'description', COMPANIES_PAGE_DESCRIPTION)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'keywords', COMPANIES_PAGE_KEYWORDS)
-  nextHtml = replaceOrInsertMeta(
-    nextHtml,
-    'name',
-    'robots',
-    isSearchPage
-      ? 'noindex,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
-      : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
-  )
+  // Every list page stays crawlable but out of the index, so a company keyword search
+  // lands on that company's detail page instead of the board.
+  nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'robots', COMPANY_LIST_ROBOTS)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:type', 'website')
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:site_name', SEARCH_RESULT_SITE_NAME)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:title', title)
@@ -664,7 +774,7 @@ export const buildCompaniesPageHtml = (html, pageData) => {
             '@type': 'ListItem',
             position: (renderPageData.page - 1) * COMPANY_CASES_PER_PAGE + index + 1,
             name: item.name,
-            url: `${SITE_BASE_URL}/companies/${encodeURIComponent(item.id)}`,
+            url: `${SITE_BASE_URL}${getCompanyCasePath(item)}`,
           })),
         },
       },
@@ -685,29 +795,26 @@ export const buildCompaniesPageHtml = (html, pageData) => {
   return nextHtml
 }
 
-export const buildCompanyCasePageHtml = (html, rawCompanyCase) => {
+export const buildCompanyCasePageHtml = (html, rawCompanyCase, related = []) => {
   const companyCase = resolveCompanyContent(rawCompanyCase)
   const DEFAULT_IMAGE_URL = `${SITE_BASE_URL}/logo.png`
-  const path = `/companies/${encodeURIComponent(companyCase.id)}`
+  const path = getCompanyCasePath(companyCase)
   const canonicalUrl = `${SITE_BASE_URL}${path}`
   const imageUrl = toAbsoluteUrl(companyCase.image, SITE_BASE_URL) || DEFAULT_IMAGE_URL
-  const title = `${companyCase.name} | 사기업체 게시판 | 법무법인 나란`
-  const description = getDescriptionExcerpt(
-    companyCase.description,
-    `${companyCase.name} 관련 ${companyCase.service} 피해 사례와 피해회복 상담 정보를 확인하세요.`,
-  )
-  const keywords = `${companyCase.name}, ${companyCase.service}, ${companyCase.name} 사기, 사기업체 게시판, 사기 피해 사례, 피해회복 상담, 법무법인 나란`
+  const { title, description, keywords, keyword } = getCompanyDetailSeo(companyCase)
+  const visibleRelated = companyCase.isPublic === false ? [] : related
 
   let nextHtml = html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(title)}</title>`)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'description', description)
   nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'keywords', keywords)
-  nextHtml = replaceOrInsertMeta(
-    nextHtml,
-    'name',
-    'robots',
-    'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
-  )
+  nextHtml = replaceOrInsertMeta(nextHtml, 'name', 'robots', COMPANY_DETAIL_ROBOTS)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:type', 'article')
+  if (companyCase.datePublished) {
+    nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'article:published_time', companyCase.datePublished)
+  }
+  if (companyCase.dateModified) {
+    nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'article:modified_time', companyCase.dateModified)
+  }
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:site_name', SEARCH_RESULT_SITE_NAME)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:title', title)
   nextHtml = replaceOrInsertMeta(nextHtml, 'property', 'og:description', description)
@@ -730,6 +837,7 @@ export const buildCompanyCasePageHtml = (html, rawCompanyCase) => {
         inLanguage: 'ko-KR',
         image: imageUrl,
         articleSection: companyCase.service,
+        keywords,
         ...(companyCase.datePublished ? { datePublished: companyCase.datePublished } : {}),
         ...(companyCase.dateModified ? { dateModified: companyCase.dateModified } : {}),
         mainEntityOfPage: {
@@ -746,7 +854,12 @@ export const buildCompanyCasePageHtml = (html, rawCompanyCase) => {
           name: '법무법인 나란',
           url: SITE_BASE_URL,
         },
-        about: [companyCase.name, companyCase.service, '사기 피해 사례', '피해회복 상담'],
+        about: [
+          { '@type': 'Thing', name: keyword },
+          companyCase.service,
+          '사기 피해 사례',
+          '피해회복 상담',
+        ],
       },
       getCompaniesBreadcrumbStructuredData(canonicalUrl, companyCase, SITE_BASE_URL),
     ],
@@ -755,12 +868,13 @@ export const buildCompanyCasePageHtml = (html, rawCompanyCase) => {
   nextHtml = replaceOrInsertBootstrapData(nextHtml, {
     kind: 'detail',
     item: companyCase,
+    related: visibleRelated,
   })
   nextHtml = replaceRootContent(
     nextHtml,
     companyCase.isPublic === false
       ? renderPhoneCompanyCaseServerContent(companyCase)
-      : renderCompanyCaseServerContent(companyCase, SITE_BASE_URL),
+      : renderCompanyCaseServerContent(companyCase, SITE_BASE_URL, visibleRelated),
   )
   nextHtml = removeHomepageOnlyStructuredData(nextHtml)
 
@@ -853,18 +967,28 @@ export default async function handler(req, res) {
     const indexHtml = await getIndexHtml()
 
     if (id) {
-      const companyCase = await getCompanyCase(id)
+      const result = await getCompanyCase(id)
 
-      if (!companyCase) {
+      if (!result) {
         const requestedPath = `/companies/${encodeURIComponent(id)}`
         return sendHtml(req, res, 404, buildNotFoundPageHtml(indexHtml, requestedPath), 'no-store')
       }
+
+      // Old random-id URLs that search engines already indexed move permanently
+      // to the keyword URL, carrying their ranking with them.
+      if (result.redirectTo) {
+        res.setHeader('Location', result.redirectTo)
+        res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600')
+        return res.status(301).end()
+      }
+
+      const { companyCase, related } = result
 
       return sendHtml(
         req,
         res,
         200,
-        buildCompanyCasePageHtml(indexHtml, companyCase),
+        buildCompanyCasePageHtml(indexHtml, companyCase, related),
         companyCase.isPublic === false
           ? 'private, no-store'
           : 'public, s-maxage=300, stale-while-revalidate=3600',

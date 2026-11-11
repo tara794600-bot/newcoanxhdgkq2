@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { assignCompanySlugs } from '../shared/company-slug.js'
 import { getLatestRssCompanyCases, renderRss } from '../server/rss.js'
 
 const parseJsonEnv = (key) => {
@@ -26,7 +27,21 @@ const loadCompanyCases = async () => {
     if (!account) throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON 환경변수를 설정해주세요.')
     app = initializeApp({ credential: cert(account) })
   }
-  return getLatestRssCompanyCases(getFirestore(app).collection('companyCases'))
+  const collectionRef = getFirestore(app).collection('companyCases')
+  const [items, nameSnapshot] = await Promise.all([
+    getLatestRssCompanyCases(collectionRef),
+    // Keyword URLs depend on every post's name, not just the 500 in the feed.
+    collectionRef.select('name', 'createdAt').get(),
+  ])
+  const slugs = assignCompanySlugs(
+    nameSnapshot.docs
+      .map((doc) => {
+        const data = doc.data() ?? {}
+        return { id: doc.id, name: typeof data.name === 'string' ? data.name.trim() : '', createdAt: data.createdAt }
+      })
+      .filter((entry) => entry.name),
+  )
+  return items.map((item) => ({ ...item, slug: slugs.get(item.id) ?? item.id }))
 }
 
 export const createRssHandler = (loadItems = loadCompanyCases) => async (req, res) => {

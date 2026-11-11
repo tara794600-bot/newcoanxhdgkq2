@@ -17,6 +17,8 @@ export const resolveCompanyContent = (data) => {
   const introduction = `${name || '해당 업체'} 관련${service ? ` ${service}` : ''} 사례 정보입니다.`
   return {
     ...data,
+    // The typed name is kept for page titles and keyword URLs.
+    sourceName: name,
     name: name ? `${name} | ${service ? `${service} ` : ''}사례 정리` : '',
     description: !description
       ? ''

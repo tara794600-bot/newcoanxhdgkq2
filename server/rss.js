@@ -1,4 +1,5 @@
 import { CONTENT_SITE, resolveCompanyContent } from '../shared/company-content.js'
+import { getCompanyCasePath } from '../shared/company-slug.js'
 import { SEO_META_BY_ROUTE } from '../shared/page-meta.js'
 import { descriptionToPlainText } from '../shared/rich-text.js'
 
@@ -63,7 +64,7 @@ const getDescriptionExcerpt = (value) => {
 export const renderRss = (companyCases, buildDate = new Date()) => {
   const items = companyCases.slice(0, RSS_ITEM_LIMIT).map((companyCase) => {
     const content = resolveCompanyContent(companyCase)
-    const url = `${CONTENT_SITE.url}/companies/${encodeURIComponent(companyCase.id)}`
+    const url = `${CONTENT_SITE.url}${getCompanyCasePath(companyCase)}`
     const pubDate = toRssDate(companyCase.createdAt)
 
     return `    <item>

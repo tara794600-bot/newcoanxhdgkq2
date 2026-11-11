@@ -51,6 +51,8 @@ const listHtml = buildCompaniesPageHtml(indexHtml, {
 })
 
 assert.match(listHtml, /<title>사기업체 게시판 2페이지 \| 법무법인 나란<\/title>/)
+// List pages pass crawlers on to detail pages without competing with them in search.
+assert.match(listHtml, /<meta name="robots" content="noindex,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" \/>/)
 assert.match(listHtml, /<link rel="canonical" href="https:\/\/www\.naranfintechnews\.co\.kr\/companies\?page=2"/)
 assert.match(listHtml, /href="\/companies\/sample-one"/)
 assert.match(listHtml, /href="\/companies\?page=3"/)
@@ -74,7 +76,7 @@ const privateDetailHtml = buildCompanyCasePageHtml(indexHtml, {
   isSearchBlocked: false,
 })
 
-assert.match(privateDetailHtml, /<title>샘플 업체 1 \| 투자 사기 의심 사례 사례 정리 \| 사기업체 게시판 \| 법무법인 나란<\/title>/)
+assert.match(privateDetailHtml, /<title>샘플 업체 1 사기 의심 \| 투자 사기 의심 사례 사례 정리 \| 법무법인 나란<\/title>/)
 assert.match(privateDetailHtml, /현재 페이지는 삭제되었습니다\.<br \/>해당 내용으로 사칭 피해를 보신 분들은 즉시 1551-7203으로 연락 바랍니다\./)
 assert.match(privateDetailHtml, /href="tel:15517203">전화연결<\/a>/)
 assert.match(privateDetailHtml, /content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"/)
